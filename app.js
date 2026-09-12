@@ -1,8 +1,9 @@
 const SUPABASE_URL = "https://jsoujnbaucvvwgfilnoc.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzb3VqbmJhdWN2dndnZmlsbm9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNDA5MzIsImV4cCI6MjEwNDcxNjkzMn0.l-dTfSmQzEsQF0AP-CPx0xZI9ox6hFyF4G8bDKSg7yw";
 
-let supabase;
-try { supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } 
+// Aqui está a mágica: renomeamos para 'db' para não conflitar com a biblioteca
+let db;
+try { db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } 
 catch(e) { console.error("Falha ao inicializar o Supabase:", e); }
 
 let vendasGlobais = [], vendasFiltradasGlobal = []; 
@@ -27,7 +28,7 @@ function aplicarPermissoes() {
     const nivel = localStorage.getItem('app_auth_nivel') || 'OPERADOR';
     document.querySelectorAll('.admin-only').forEach(el => { el.style.display = (nivel !== 'ADMIN') ? 'none' : ''; });
     const nt = document.getElementById('nivelText');
-    if(nt) { nt.innerText = nivel === 'ADMIN' ? "👑 ADMIN" : "👤 OPERADOR"; nt.className = nivel === 'ADMIN' ? "text-[10px] font-extrabold px-2 py-0.5 rounded bg-purple-100 text-purple-700" : "text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-100 text-blue-700"; }
+    if(nt) { nt.innerText = nivel === 'ADMIN' ? "👑 ADMIN" : "👤 OPERADOR"; nt.className = nivel === 'ADMIN' ? "text-[10px] font-extrabold px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" : "text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"; }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -57,7 +58,7 @@ async function testarConexaoLogin() {
     dot.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"; text.innerText = "Testando conexão..."; btn.disabled = true;
     try {
         if (!window.supabase) throw new Error("Supabase não carregado.");
-        const { error } = await supabase.from('usuarios').select('id').limit(1);
+        const { error } = await db.from('usuarios').select('id').limit(1);
         if (error) throw new Error(error.message);
         dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; text.innerText = "Sistema Online"; btn.disabled = false; btn.classList.remove('opacity-50', 'cursor-not-allowed');
     } catch (e) {
@@ -72,9 +73,9 @@ document.getElementById('formLogin').addEventListener('submit', async function(e
     const u = document.getElementById('loginUser').value.trim().toLowerCase(), p = document.getElementById('loginPass').value.trim();
     try {
         const hp = await hashSHA256(p);
-        const { count } = await supabase.from('usuarios').select('*', { count: 'exact', head: true });
-        if (count === 0 && u === 'admin' && p === 'admin') await supabase.from('usuarios').insert([{ usuario: 'admin', senha: hp, nome: 'Administrador', nivel: 'ADMIN' }]);
-        const { data } = await supabase.from('usuarios').select('*').eq('usuario', u).eq('senha', hp);
+        const { count } = await db.from('usuarios').select('*', { count: 'exact', head: true });
+        if (count === 0 && u === 'admin' && p === 'admin') await db.from('usuarios').insert([{ usuario: 'admin', senha: hp, nome: 'Administrador', nivel: 'ADMIN' }]);
+        const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hp);
         if (data && data.length > 0) {
             const ud = data[0]; localStorage.setItem('app_auth_token', ud.senha); localStorage.setItem('app_auth_name', ud.nome); localStorage.setItem('app_auth_nivel', ud.nivel); localStorage.setItem('app_auth_login', ud.usuario);
             document.getElementById('loginScreen').classList.add('hidden'); document.getElementById('appContent').classList.remove('hidden'); document.getElementById('bemVindoText').innerText = `Olá, ${ud.nome}`;
@@ -101,8 +102,8 @@ document.getElementById('formAlterarSenha').addEventListener('submit', async fun
     mostrarLoading("Alterando...");
     try {
         const u = localStorage.getItem('app_auth_login'), ha = await hashSHA256(sa);
-        const { data } = await supabase.from('usuarios').select('*').eq('usuario', u).eq('senha', ha);
-        if (data && data.length > 0) { const hn = await hashSHA256(sn); await supabase.from('usuarios').update({ senha: hn }).eq('usuario', u); localStorage.setItem('app_auth_token', hn); showToast("Senha alterada!", 'success'); fecharModalSenha(); }
+        const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', ha);
+        if (data && data.length > 0) { const hn = await hashSHA256(sn); await db.from('usuarios').update({ senha: hn }).eq('usuario', u); localStorage.setItem('app_auth_token', hn); showToast("Senha alterada!", 'success'); fecharModalSenha(); }
         else showToast("Senha atual incorreta.", 'error');
     } catch (err) { showToast("Erro.", "error"); } finally { esconderLoading(); }
 });
@@ -114,8 +115,8 @@ document.getElementById('formExcluirMes').addEventListener('submit', async funct
     mostrarLoading("Apagando...");
     try {
         const u = localStorage.getItem('app_auth_login'), hs = await hashSHA256(s);
-        const { data } = await supabase.from('usuarios').select('*').eq('usuario', u).eq('senha', hs);
-        if (data && data.length > 0 && data[0].nivel === 'ADMIN') { const { error } = await supabase.from('vendas').delete().eq('ano', a).ilike('mes', m); if(!error) { showToast("Excluídos!", 'success'); fecharModalExcluirMes(); await carregarDadosDaNuvem(); } else showToast("Erro DB.", 'error'); }
+        const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hs);
+        if (data && data.length > 0 && data[0].nivel === 'ADMIN') { const { error } = await db.from('vendas').delete().eq('ano', a).ilike('mes', m); if(!error) { showToast("Excluídos!", 'success'); fecharModalExcluirMes(); await carregarDadosDaNuvem(); } else showToast("Erro DB.", 'error'); }
         else showToast("Acesso negado.", 'error');
     } catch (err) { showToast("Erro.", "error"); } finally { esconderLoading(); }
 });
@@ -123,7 +124,7 @@ document.getElementById('formExcluirMes').addEventListener('submit', async funct
 window.addEventListener('click', function(e){ const b = document.getElementById('exportMenuBtn'), d = document.getElementById('exportDropdown'); if (b && d && !b.contains(e.target) && !d.contains(e.target)) d.classList.add('hidden'); });
 function toggleExportMenu() { document.getElementById('exportDropdown').classList.toggle('hidden'); }
 function switchTab(id) {
-    ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise'].forEach(t => { const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); if(el) el.classList.add('hidden'); if(bt) bt.className = "px-5 py-2 rounded-full font-bold text-sm text-gray-600 hover:bg-white/40 " + (['usuarios','novo','skus','analise'].includes(t)?'admin-only':''); });
+    ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise'].forEach(t => { const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); if(el) el.classList.add('hidden'); if(bt) bt.className = "px-5 py-2 rounded-full font-bold text-sm text-gray-600 dark:text-gray-300 hover:bg-white/40 " + (['usuarios','novo','skus','analise'].includes(t)?'admin-only':''); });
     document.getElementById('tab-'+id).classList.remove('hidden'); document.getElementById('btn-tab-'+id).className = "px-5 py-2 rounded-full font-bold text-sm shadow-md text-white bg-blue-600 " + (['usuarios','novo','skus','analise'].includes(id)?'admin-only':''); aplicarPermissoes();
 }
 function toggleGrafico() { document.getElementById('graficoContainer').classList.toggle('hidden'); }
@@ -139,7 +140,7 @@ async function carregarDadosDaNuvem() {
     const ind = document.getElementById('statusConexao'), txt = document.getElementById('textoConexao');
     ind.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"; txt.innerText = "Sincronizando DB...";
     try {
-        const [vR, sR, uR] = await Promise.all([ supabase.from('vendas').select('*').order('created_at', { ascending: false }), supabase.from('custos_sku').select('*'), supabase.from('usuarios').select('*') ]);
+        const [vR, sR, uR] = await Promise.all([ db.from('vendas').select('*').order('created_at', { ascending: false }), db.from('custos_sku').select('*'), db.from('usuarios').select('*') ]);
         if (vR.error) throw vR.error;
         vendasGlobais = (vR.data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes).toUpperCase(), qtd: v.quantidade, descricao: v.descricao, sku: v.sku, nVenda: v.n_venda, urlPlataforma: v.url_ml, plataforma: v.plataforma, valorVenda: Number(v.valor_venda), sobra: Number(v.sobra), imposto: Number(v.imposto), custo: Number(v.custo), lucro: Number(v.lucro), porcentagem: Number(v.porcentagem)*100, status: v.status }));
         aplicarFiltros();
@@ -226,10 +227,10 @@ document.getElementById('vendaForm').addEventListener('submit', async function(e
     const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${nv}`:'');
     const t=q*v, s=t-(q*i), lu=s-(q*c);
     const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
-    try { const { error } = await supabase.from('vendas').upsert(p, {onConflict:'plataforma,n_venda'}); if(error) throw error; limparRascunho(); await carregarDadosDaNuvem(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(e){showToast("Erro", "error");} finally {esconderLoading();}
+    try { const { error } = await db.from('vendas').upsert(p, {onConflict:'plataforma,n_venda'}); if(error) throw error; limparRascunho(); await carregarDadosDaNuvem(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(e){showToast("Erro", "error");} finally {esconderLoading();}
 });
 
-async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN')return; if(!confirm("Apagar?"))return; mostrarLoading("Apagando..."); try { await supabase.from('vendas').delete().eq('id',id); await carregarDadosDaNuvem(); showToast("Excluído!","success"); } catch(e){} finally{esconderLoading();} }
+async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN')return; if(!confirm("Apagar?"))return; mostrarLoading("Apagando..."); try { await db.from('vendas').delete().eq('id',id); await carregarDadosDaNuvem(); showToast("Excluído!","success"); } catch(e){} finally{esconderLoading();} }
 
 // SKUs
 function importarCsvSkus(e) {
@@ -240,7 +241,7 @@ function importarCsvSkus(e) {
             const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>x.includes("CUSTO"));
             if(iS===-1 && iP===-1) throw new Error("Invalido");
             const p=[]; for(let i=1;i<l.length;i++){ if(!l[i].trim())continue; const c=l[i].split(l[0].includes(';')?';':','); if(c.length<2)continue; p.push({sku:iS>-1?c[iS].trim():'', produto:iP>-1?c[iP].trim():'', custo_atual:universalNumberParse(iC>-1?c[iC]:0), status:'Ativo'}); }
-            if(p.length>0) { await supabase.from('custos_sku').upsert(p, {onConflict:'sku'}); await carregarDadosDaNuvem(); showToast("Importado!","success"); }
+            if(p.length>0) { await db.from('custos_sku').upsert(p, {onConflict:'sku'}); await carregarDadosDaNuvem(); showToast("Importado!","success"); }
         } catch(err){} finally{esconderLoading(); document.getElementById('fileImportSkuCsv').value='';}
     }; r.readAsText(f);
 }
@@ -248,13 +249,13 @@ function renderPaginaSkus(p) {
     const b=document.getElementById('buscaSkus').value.toLowerCase(); skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b));
     const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); tb.innerHTML='';
     skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => {
-        const tr=document.createElement('tr'); tr.innerHTML=`<td class="p-3">${s.SKU}</td><td class="p-3">${s.PRODUTO}</td><td class="p-3 text-right">${formatMoney(s.CUSTO_ANTERIOR)}</td><td class="p-3 text-right text-red-500 font-bold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-3 text-center">${s.STATUS}</td><td class="p-3 text-center admin-only"><button onclick="editarSku('${s.SKU}')" class="text-blue-500">✏️</button></td>`; tb.appendChild(tr);
+        const tr=document.createElement('tr'); tr.innerHTML=`<td class="p-3">${s.SKU}</td><td class="p-3">${s.PRODUTO}</td><td class="p-3 text-right">${formatMoney(s.CUSTO_ANTERIOR)}</td><td class="p-3 text-right text-red-500 font-bold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-3 text-right">${formatMoney(s.CUSTO_MEDIO)}</td><td class="p-3 text-center">${s.STATUS}</td><td class="p-3 text-center admin-only"><button onclick="editarSku('${s.SKU}')" class="text-blue-500">✏️</button></td>`; tb.appendChild(tr);
     });
     document.getElementById('lblPaginaSkus').innerText=paginaAtualSkus; document.getElementById('lblTotalPaginasSkus').innerText=tp;
 }
 function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
-function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=p.CUSTO_ATUAL; document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
-document.getElementById('formCadastroSku').addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await supabase.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value, produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosDaNuvem(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} });
+function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
+document.getElementById('formCadastroSku').addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await db.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value, produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosDaNuvem(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} });
 
 // Users
 function renderTabelaUsuarios() {
@@ -262,8 +263,8 @@ function renderTabelaUsuarios() {
     usuariosGlobais.forEach(u => { const tr=document.createElement('tr'); tr.innerHTML=`<td class="p-3 font-bold">${u.usuario}</td><td class="p-3">${u.nome}</td><td class="p-3">${u.nivel}</td><td class="p-3 text-center"><button onclick="editarUsuario('${u.usuario}','${u.nome}','${u.nivel}')" class="text-blue-500">✏️</button></td><td class="p-3 text-center"><button onclick="deletarUsuario('${u.originalIndex}','${u.usuario}')" class="text-red-500">🗑️</button></td>`; tb.appendChild(tr); });
 }
 function editarUsuario(u,n,l) { document.getElementById('userForm_user').value=u; document.getElementById('userForm_nome').value=n; document.getElementById('userForm_nivel').value=l; document.getElementById('userForm_senha').value=''; window.scrollTo(0,0); }
-document.getElementById('formCadastroUser').addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { const u=document.getElementById('userForm_user').value, s=document.getElementById('userForm_senha').value; const p={usuario:u, nome:document.getElementById('userForm_nome').value, nivel:document.getElementById('userForm_nivel').value}; const {data}=await supabase.from('usuarios').select('id,senha').eq('usuario',u); if(s) p.senha=await hashSHA256(s); else if(data&&data.length>0) p.senha=data[0].senha; else p.senha=await hashSHA256(u); if(data&&data.length>0) await supabase.from('usuarios').update(p).eq('id',data[0].id); else await supabase.from('usuarios').insert([p]); document.getElementById('formCadastroUser').reset(); await carregarDadosDaNuvem(); showToast("Salvo!","success"); } catch(er){} finally{esconderLoading();} });
-async function deletarUsuario(id,u) { if(u===localStorage.getItem('app_auth_login'))return; if(!confirm("Apagar?"))return; mostrarLoading(); try { await supabase.from('usuarios').delete().eq('id',id); await carregarDadosDaNuvem(); } catch(e){} finally{esconderLoading();} }
+document.getElementById('formCadastroUser').addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { const u=document.getElementById('userForm_user').value, s=document.getElementById('userForm_senha').value; const p={usuario:u, nome:document.getElementById('userForm_nome').value, nivel:document.getElementById('userForm_nivel').value}; const {data}=await db.from('usuarios').select('id,senha').eq('usuario',u); if(s) p.senha=await hashSHA256(s); else if(data&&data.length>0) p.senha=data[0].senha; else p.senha=await hashSHA256(u); if(data&&data.length>0) await db.from('usuarios').update(p).eq('id',data[0].id); else await db.from('usuarios').insert([p]); document.getElementById('formCadastroUser').reset(); await carregarDadosDaNuvem(); showToast("Salvo!","success"); } catch(er){} finally{esconderLoading();} });
+async function deletarUsuario(id,u) { if(u===localStorage.getItem('app_auth_login'))return; if(!confirm("Apagar?"))return; mostrarLoading(); try { await db.from('usuarios').delete().eq('id',id); await carregarDadosDaNuvem(); } catch(e){} finally{esconderLoading();} }
 
 // Lote Import
 function iniciarImportacao(e) {
@@ -317,7 +318,7 @@ async function processarEnvioEmLote() {
         b.push({ano:ad, mes:md, quantidade:q, descricao:ds, n_venda:nv, plataforma:pG, valor_venda:rp, sobra:sob, imposto:imp, custo:cst, lucro:luc, porcentagem:mar, sku:sk, status:st, estorno:es});
     }
     if(b.length>0) {
-        try { const {error} = await supabase.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); if(error)throw error; document.getElementById('resumoLoteNovos').innerText=qN; document.getElementById('resumoLoteAtualizados').innerText=qA; document.getElementById('modalMapeamento').classList.add('hidden'); await carregarDadosDaNuvem(); document.getElementById('modalResumoLote').classList.remove('hidden'); } catch(e){}
+        try { const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); if(error)throw error; document.getElementById('resumoLoteNovos').innerText=qN; document.getElementById('resumoLoteAtualizados').innerText=qA; document.getElementById('modalMapeamento').classList.add('hidden'); await carregarDadosDaNuvem(); document.getElementById('modalResumoLote').classList.remove('hidden'); } catch(e){}
     }
     esconderLoading();
 }
