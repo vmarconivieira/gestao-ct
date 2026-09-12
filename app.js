@@ -1,7 +1,6 @@
 const SUPABASE_URL = "https://jsoujnbaucvvwgfilnoc.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzb3VqbmJhdWN2dndnZmlsbm9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNDA5MzIsImV4cCI6MjEwNDcxNjkzMn0.l-dTfSmQzEsQF0AP-CPx0xZI9ox6hFyF4G8bDKSg7yw";
 
-// Aqui está a mágica: renomeamos para 'db' para não conflitar com a biblioteca
 let db;
 try { db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } 
 catch(e) { console.error("Falha ao inicializar o Supabase:", e); }
@@ -36,109 +35,147 @@ document.addEventListener('DOMContentLoaded', () => {
     const token = localStorage.getItem('app_auth_token');
     const userName = localStorage.getItem('app_auth_name');
     if (token) {
-        document.getElementById('loginScreen').classList.add('hidden'); document.getElementById('appContent').classList.remove('hidden');
-        if(userName) document.getElementById('bemVindoText').innerText = `Olá, ${userName}`;
+        const ls = document.getElementById('loginScreen'); if(ls) ls.classList.add('hidden'); 
+        const ac = document.getElementById('appContent'); if(ac) ac.classList.remove('hidden');
+        const bv = document.getElementById('bemVindoText'); if(userName && bv) bv.innerText = `Olá, ${userName}`;
         aplicarPermissoes(); carregarRascunhoForm(); carregarDadosDaNuvem(); restaurarEstadoImportacao(); 
     } else {
-        document.getElementById('loginScreen').classList.remove('hidden'); document.getElementById('appContent').classList.add('hidden');
+        const ls = document.getElementById('loginScreen'); if(ls) ls.classList.remove('hidden'); 
+        const ac = document.getElementById('appContent'); if(ac) ac.classList.add('hidden');
         testarConexaoLogin();
     }
     document.querySelectorAll('.form-draft').forEach(el => { el.addEventListener('input', salvarRascunhoForm); el.addEventListener('change', salvarRascunhoForm); });
-    document.getElementById('sku').addEventListener('blur', function() {
-        const codigo = this.value.trim().toUpperCase();
-        if(codigo && catalogoSkus[codigo]) {
-            document.getElementById('descricao').value = catalogoSkus[codigo].produto; document.getElementById('custo').value = catalogoSkus[codigo].custo_atual;
-            calcularMargemForm(); showToast('SKU Localizado!', 'success');
-        }
-    });
+    
+    const skuEl = document.getElementById('sku');
+    if (skuEl) {
+        skuEl.addEventListener('blur', function() {
+            const codigo = this.value.trim().toUpperCase();
+            if(codigo && catalogoSkus[codigo]) {
+                const d = document.getElementById('descricao'); if(d) d.value = catalogoSkus[codigo].produto; 
+                const c = document.getElementById('custo'); if(c) c.value = catalogoSkus[codigo].custo_atual;
+                calcularMargemForm(); showToast('SKU Localizado!', 'success');
+            }
+        });
+    }
 });
 
 async function testarConexaoLogin() {
     const dot = document.getElementById('loginStatusDot'), text = document.getElementById('loginStatusText'), btn = document.getElementById('btnLogin');
-    dot.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"; text.innerText = "Testando conexão..."; btn.disabled = true;
+    if(dot) dot.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"; 
+    if(text) text.innerText = "Testando conexão..."; 
+    if(btn) btn.disabled = true;
     try {
         if (!window.supabase) throw new Error("Supabase não carregado.");
         const { error } = await db.from('usuarios').select('id').limit(1);
         if (error) throw new Error(error.message);
-        dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; text.innerText = "Sistema Online"; btn.disabled = false; btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        if(dot) dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; 
+        if(text) text.innerText = "Sistema Online"; 
+        if(btn) { btn.disabled = false; btn.classList.remove('opacity-50', 'cursor-not-allowed'); }
     } catch (e) {
-        dot.className = "w-2.5 h-2.5 rounded-full bg-red-500 mr-2"; text.innerText = "Erro: " + e.message; setTimeout(testarConexaoLogin, 6000);
+        if(dot) dot.className = "w-2.5 h-2.5 rounded-full bg-red-500 mr-2"; 
+        if(text) text.innerText = "Erro: " + e.message; 
+        setTimeout(testarConexaoLogin, 6000);
     }
 }
 
-document.getElementById('formLogin').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const btn = document.getElementById('btnLogin'), spinner = document.getElementById('loginSpinner');
-    btn.classList.add('hidden'); spinner.classList.remove('hidden');
-    const u = document.getElementById('loginUser').value.trim().toLowerCase(), p = document.getElementById('loginPass').value.trim();
-    try {
-        const hp = await hashSHA256(p);
-        const { count } = await db.from('usuarios').select('*', { count: 'exact', head: true });
-        if (count === 0 && u === 'admin' && p === 'admin') await db.from('usuarios').insert([{ usuario: 'admin', senha: hp, nome: 'Administrador', nivel: 'ADMIN' }]);
-        const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hp);
-        if (data && data.length > 0) {
-            const ud = data[0]; localStorage.setItem('app_auth_token', ud.senha); localStorage.setItem('app_auth_name', ud.nome); localStorage.setItem('app_auth_nivel', ud.nivel); localStorage.setItem('app_auth_login', ud.usuario);
-            document.getElementById('loginScreen').classList.add('hidden'); document.getElementById('appContent').classList.remove('hidden'); document.getElementById('bemVindoText').innerText = `Olá, ${ud.nome}`;
-            aplicarPermissoes(); carregarRascunhoForm(); carregarDadosDaNuvem(); showToast('Login efetuado!', 'success');
-        } else { alert("Acesso negado."); btn.classList.remove('hidden'); spinner.classList.add('hidden'); }
-    } catch (err) { alert("Erro servidor."); btn.classList.remove('hidden'); spinner.classList.add('hidden'); }
-});
+const formLogin = document.getElementById('formLogin');
+if(formLogin) {
+    formLogin.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btnLogin'), spinner = document.getElementById('loginSpinner');
+        if(btn) btn.classList.add('hidden'); 
+        if(spinner) spinner.classList.remove('hidden');
+        
+        const lu = document.getElementById('loginUser'); const lp = document.getElementById('loginPass');
+        const u = lu ? lu.value.trim().toLowerCase() : ''; const p = lp ? lp.value.trim() : '';
+        
+        try {
+            const hp = await hashSHA256(p);
+            const { count } = await db.from('usuarios').select('*', { count: 'exact', head: true });
+            if (count === 0 && u === 'admin' && p === 'admin') await db.from('usuarios').insert([{ usuario: 'admin', senha: hp, nome: 'Administrador', nivel: 'ADMIN' }]);
+            const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hp);
+            if (data && data.length > 0) {
+                const ud = data[0]; localStorage.setItem('app_auth_token', ud.senha); localStorage.setItem('app_auth_name', ud.nome); localStorage.setItem('app_auth_nivel', ud.nivel); localStorage.setItem('app_auth_login', ud.usuario);
+                document.getElementById('loginScreen').classList.add('hidden'); document.getElementById('appContent').classList.remove('hidden'); 
+                const bv = document.getElementById('bemVindoText'); if(bv) bv.innerText = `Olá, ${ud.nome}`;
+                aplicarPermissoes(); carregarRascunhoForm(); carregarDadosDaNuvem(); showToast('Login efetuado!', 'success');
+            } else { 
+                alert("Acesso negado."); 
+                if(btn) btn.classList.remove('hidden'); 
+                if(spinner) spinner.classList.add('hidden'); 
+            }
+        } catch (err) { 
+            alert("Erro servidor."); 
+            if(btn) btn.classList.remove('hidden'); 
+            if(spinner) spinner.classList.add('hidden'); 
+        }
+    });
+}
 
 function fazerLogout() { localStorage.clear(); location.reload(); }
-function abrirModalSenha() { document.getElementById('modalSenha').classList.remove('hidden'); document.getElementById('formAlterarSenha').reset(); }
-function fecharModalSenha() { document.getElementById('modalSenha').classList.add('hidden'); }
-function abrirModalExcluirMes() { document.getElementById('modalExcluirMes').classList.remove('hidden'); document.getElementById('delMesAno').value = new Date().getFullYear(); }
-function fecharModalExcluirMes() { document.getElementById('modalExcluirMes').classList.add('hidden'); }
-function showToast(m, t='info') { const c = document.getElementById('toast-container'), toast = document.createElement('div'); toast.className = `toast ${t}`; toast.innerHTML = `<span>${m}</span>`; c.appendChild(toast); setTimeout(() => { toast.style.animation = 'fadeOut 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000); }
-function mostrarLoading(t="Processando...") { document.getElementById('globalOverlayText').innerText = t; document.getElementById('globalOverlay').classList.remove('hidden'); }
-function esconderLoading() { document.getElementById('globalOverlay').classList.add('hidden'); }
-function fecharModalResumoLote() { document.getElementById('modalResumoLote').classList.add('hidden'); document.getElementById('areaLogsAuditoria').classList.add('hidden'); }
+function abrirModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.remove('hidden'); const f = document.getElementById('formAlterarSenha'); if(f) f.reset(); }
+function fecharModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.add('hidden'); }
+function abrirModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.remove('hidden'); const da = document.getElementById('delMesAno'); if(da) da.value = new Date().getFullYear(); }
+function fecharModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.add('hidden'); }
+function showToast(m, t='info') { const c = document.getElementById('toast-container'); if(!c) return; const toast = document.createElement('div'); toast.className = `toast ${t}`; toast.innerHTML = `<span>${m}</span>`; c.appendChild(toast); setTimeout(() => { toast.style.animation = 'fadeOut 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000); }
+function mostrarLoading(t="Processando...") { const ot = document.getElementById('globalOverlayText'); if(ot) ot.innerText = t; const go = document.getElementById('globalOverlay'); if(go) go.classList.remove('hidden'); }
+function esconderLoading() { const go = document.getElementById('globalOverlay'); if(go) go.classList.add('hidden'); }
+function fecharModalResumoLote() { const rm = document.getElementById('modalResumoLote'); if(rm) rm.classList.add('hidden'); const ala = document.getElementById('areaLogsAuditoria'); if(ala) ala.classList.add('hidden'); }
 
-document.getElementById('formAlterarSenha').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const sa = document.getElementById('senhaAtual').value.trim(), sn = document.getElementById('senhaNova').value.trim(), sc = document.getElementById('senhaNovaConfirma').value.trim();
-    if (sn !== sc) return showToast("Senhas não conferem.", "error");
-    if (sn.length < 4) return showToast("Mínimo 4 caracteres.", "error");
-    mostrarLoading("Alterando...");
-    try {
-        const u = localStorage.getItem('app_auth_login'), ha = await hashSHA256(sa);
-        const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', ha);
-        if (data && data.length > 0) { const hn = await hashSHA256(sn); await db.from('usuarios').update({ senha: hn }).eq('usuario', u); localStorage.setItem('app_auth_token', hn); showToast("Senha alterada!", 'success'); fecharModalSenha(); }
-        else showToast("Senha atual incorreta.", 'error');
-    } catch (err) { showToast("Erro.", "error"); } finally { esconderLoading(); }
-});
+const formAltSenha = document.getElementById('formAlterarSenha');
+if(formAltSenha) {
+    formAltSenha.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const sa = document.getElementById('senhaAtual').value.trim(), sn = document.getElementById('senhaNova').value.trim(), sc = document.getElementById('senhaNovaConfirma').value.trim();
+        if (sn !== sc) return showToast("Senhas não conferem.", "error");
+        if (sn.length < 4) return showToast("Mínimo 4 caracteres.", "error");
+        mostrarLoading("Alterando...");
+        try {
+            const u = localStorage.getItem('app_auth_login'), ha = await hashSHA256(sa);
+            const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', ha);
+            if (data && data.length > 0) { const hn = await hashSHA256(sn); await db.from('usuarios').update({ senha: hn }).eq('usuario', u); localStorage.setItem('app_auth_token', hn); showToast("Senha alterada!", 'success'); fecharModalSenha(); }
+            else showToast("Senha atual incorreta.", 'error');
+        } catch (err) { showToast("Erro.", "error"); } finally { esconderLoading(); }
+    });
+}
 
-document.getElementById('formExcluirMes').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const a = document.getElementById('delMesAno').value, m = document.getElementById('delMesNome').value, s = document.getElementById('delMesSenha').value.trim();
-    if(!confirm(`⚠️ Apagar TODOS os lançamentos de ${m}/${a}?`)) return;
-    mostrarLoading("Apagando...");
-    try {
-        const u = localStorage.getItem('app_auth_login'), hs = await hashSHA256(s);
-        const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hs);
-        if (data && data.length > 0 && data[0].nivel === 'ADMIN') { const { error } = await db.from('vendas').delete().eq('ano', a).ilike('mes', m); if(!error) { showToast("Excluídos!", 'success'); fecharModalExcluirMes(); await carregarDadosDaNuvem(); } else showToast("Erro DB.", 'error'); }
-        else showToast("Acesso negado.", 'error');
-    } catch (err) { showToast("Erro.", "error"); } finally { esconderLoading(); }
-});
+const formExcMes = document.getElementById('formExcluirMes');
+if(formExcMes) {
+    formExcMes.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const a = document.getElementById('delMesAno').value, m = document.getElementById('delMesNome').value, s = document.getElementById('delMesSenha').value.trim();
+        if(!confirm(`⚠️ Apagar TODOS os lançamentos de ${m}/${a}?`)) return;
+        mostrarLoading("Apagando...");
+        try {
+            const u = localStorage.getItem('app_auth_login'), hs = await hashSHA256(s);
+            const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hs);
+            if (data && data.length > 0 && data[0].nivel === 'ADMIN') { const { error } = await db.from('vendas').delete().eq('ano', a).ilike('mes', m); if(!error) { showToast("Excluídos!", 'success'); fecharModalExcluirMes(); await carregarDadosDaNuvem(); } else showToast("Erro DB.", 'error'); }
+            else showToast("Acesso negado.", 'error');
+        } catch (err) { showToast("Erro.", "error"); } finally { esconderLoading(); }
+    });
+}
 
 window.addEventListener('click', function(e){ const b = document.getElementById('exportMenuBtn'), d = document.getElementById('exportDropdown'); if (b && d && !b.contains(e.target) && !d.contains(e.target)) d.classList.add('hidden'); });
-function toggleExportMenu() { document.getElementById('exportDropdown').classList.toggle('hidden'); }
+function toggleExportMenu() { const ed = document.getElementById('exportDropdown'); if(ed) ed.classList.toggle('hidden'); }
 function switchTab(id) {
     ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise'].forEach(t => { const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); if(el) el.classList.add('hidden'); if(bt) bt.className = "px-5 py-2 rounded-full font-bold text-sm text-gray-600 dark:text-gray-300 hover:bg-white/40 " + (['usuarios','novo','skus','analise'].includes(t)?'admin-only':''); });
-    document.getElementById('tab-'+id).classList.remove('hidden'); document.getElementById('btn-tab-'+id).className = "px-5 py-2 rounded-full font-bold text-sm shadow-md text-white bg-blue-600 " + (['usuarios','novo','skus','analise'].includes(id)?'admin-only':''); aplicarPermissoes();
+    const selTab = document.getElementById('tab-'+id); if(selTab) selTab.classList.remove('hidden'); 
+    const selBtn = document.getElementById('btn-tab-'+id); if(selBtn) selBtn.className = "px-5 py-2 rounded-full font-bold text-sm shadow-md text-white bg-blue-600 " + (['usuarios','novo','skus','analise'].includes(id)?'admin-only':''); 
+    aplicarPermissoes();
 }
-function toggleGrafico() { document.getElementById('graficoContainer').classList.toggle('hidden'); }
+function toggleGrafico() { const gc = document.getElementById('graficoContainer'); if(gc) gc.classList.toggle('hidden'); }
 function salvarRascunhoForm() { const d = {}; document.querySelectorAll('.form-draft').forEach(el => d[el.id] = el.value); localStorage.setItem('vendaDraft', JSON.stringify(d)); }
-function carregarRascunhoForm() { const d = localStorage.getItem('vendaDraft'); if (d) try { const o = JSON.parse(d); Object.keys(o).forEach(id => { if(document.getElementById(id)) document.getElementById(id).value = o[id]; }); calcularMargemForm(); } catch(e){} }
-function limparRascunho() { localStorage.removeItem('vendaDraft'); document.getElementById('vendaForm').reset(); configurarDataAtual(); calcularMargemForm(); }
+function carregarRascunhoForm() { const d = localStorage.getItem('vendaDraft'); if (d) try { const o = JSON.parse(d); Object.keys(o).forEach(id => { const el = document.getElementById(id); if(el) el.value = o[id]; }); calcularMargemForm(); } catch(e){} }
+function limparRascunho() { localStorage.removeItem('vendaDraft'); const vf = document.getElementById('vendaForm'); if(vf) vf.reset(); configurarDataAtual(); calcularMargemForm(); }
 function inicializarTema() { if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) toggleDarkMode(true); }
 function toggleDarkMode(f = null) { const h = document.documentElement; isDarkMode = f !== null ? f : !h.classList.contains('dark'); if (isDarkMode) { h.classList.add('dark'); localStorage.setItem('theme', 'dark'); } else { h.classList.remove('dark'); localStorage.setItem('theme', 'light'); } if(vendasGlobais.length > 0) aplicarFiltros(); }
-function configurarDataAtual() { const d = new Date(); document.getElementById('ano').value = d.getFullYear(); const m = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]; document.getElementById('mes').value = m[d.getMonth()]; document.getElementById('filtroAno').value = d.getFullYear(); document.getElementById('filtroMes').value = m[d.getMonth()]; }
+function configurarDataAtual() { const d = new Date(); const anoEl = document.getElementById('ano'); if(anoEl) anoEl.value = d.getFullYear(); const m = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]; const mesEl = document.getElementById('mes'); if(mesEl) mesEl.value = m[d.getMonth()]; const faEl = document.getElementById('filtroAno'); if(faEl) faEl.value = d.getFullYear(); const fmEl = document.getElementById('filtroMes'); if(fmEl) fmEl.value = m[d.getMonth()]; }
 
 async function carregarDadosDaNuvem() {
     if (isFetching) return; isFetching = true;
     const ind = document.getElementById('statusConexao'), txt = document.getElementById('textoConexao');
-    ind.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"; txt.innerText = "Sincronizando DB...";
+    if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"; 
+    if(txt) txt.innerText = "Sincronizando DB...";
     try {
         const [vR, sR, uR] = await Promise.all([ db.from('vendas').select('*').order('created_at', { ascending: false }), db.from('custos_sku').select('*'), db.from('usuarios').select('*') ]);
         if (vR.error) throw vR.error;
@@ -147,8 +184,15 @@ async function carregarDadosDaNuvem() {
         if (sR.data) { catalogoSkusGlobais = sR.data.map(s => ({ SKU: s.sku, PRODUTO: s.produto, CUSTO_ANTERIOR: s.custo_anterior, CUSTO_ATUAL: s.custo_atual, CUSTO_MEDIO: s.custo_medio, FORNECEDOR: s.fornecedor, DATA_ATUALIZACAO: s.data_atualizacao, STATUS: s.status })); parseSkusDictionary(); renderPaginaSkus(1); }
         if (uR.data) { usuariosGlobais = uR.data.map(u => ({ usuario: u.usuario, nome: u.nome, nivel: u.nivel, originalIndex: u.id })); renderTabelaUsuarios(); }
         carregarFiltroAnalise();
-        ind.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; txt.innerText = `Online`; isFetching = false;
-    } catch (e) { ind.className = "w-2.5 h-2.5 rounded-full bg-red-500 mr-2"; txt.innerText = "Offline"; isFetching = false; setTimeout(carregarDadosDaNuvem, 15000); }
+        if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; 
+        if(txt) txt.innerText = `Online`; 
+        isFetching = false;
+    } catch (e) { 
+        if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-red-500 mr-2"; 
+        if(txt) txt.innerText = "Offline"; 
+        isFetching = false; 
+        setTimeout(carregarDadosDaNuvem, 15000); 
+    }
 }
 
 function parseSkusDictionary() { catalogoSkus = {}; catalogoSkusGlobais.forEach(s => { let c = String(s.SKU||"").trim().toUpperCase(); if(c && String(s.STATUS||"").trim().toUpperCase() !== "INATIVO") catalogoSkus[c] = { produto: String(s.PRODUTO).trim(), custo_atual: Number(s.CUSTO_ATUAL) }; }); }
@@ -161,24 +205,31 @@ function carregarFiltroAnalise() {
 }
 
 function renderizarAbaInteligencia() {
-    const k = document.getElementById('selectAnaliseSku').value, v = document.getElementById('containerAnaliseVazia'), d = document.getElementById('containerAnaliseDados');
-    if(!k) { v.classList.remove('hidden'); d.classList.add('hidden'); return; }
-    v.classList.add('hidden'); d.classList.remove('hidden');
+    const sA = document.getElementById('selectAnaliseSku'); const k = sA ? sA.value : ''; 
+    const v = document.getElementById('containerAnaliseVazia'), d = document.getElementById('containerAnaliseDados');
+    if(!k) { if(v) v.classList.remove('hidden'); if(d) d.classList.add('hidden'); return; }
+    if(v) v.classList.add('hidden'); if(d) d.classList.remove('hidden');
     const vs = vendasGlobais.filter(x => (String(x.sku||"").trim().toUpperCase() || String(x.descricao||"").trim()).toUpperCase() === k.toUpperCase()).sort((a,b) => new Date(a.ano, a.mes) - new Date(b.ano, b.mes));
     let u=0, r=0, l=0; const hP=[], hC=[], hM=[], lx=[];
     vs.forEach(x => { if(x.valorVenda<=0) return; const q=x.qtd>0?x.qtd:1; u+=q; r+=x.valorVenda; l+=x.lucro; lx.push(`${x.mes.substring(0,3)}/${x.ano}`); hP.push(x.valorVenda/q); hC.push(x.custo/q); hM.push(x.porcentagem); });
     const pm = u>0?(r/u):0, mm = r>0?(l/r)*100:0;
-    document.getElementById('analiseQtdTotal').innerText = u; document.getElementById('analisePrecoMedio').innerText = `R$ ${pm.toFixed(2)}`; document.getElementById('analiseMargemMedia').innerText = `${mm.toFixed(2)}%`;
-    if(chartAnalise) chartAnalise.destroy();
-    chartAnalise = new Chart(document.getElementById('chartAnaliseSku').getContext('2d'), { type:'line', data:{labels:lx, datasets:[{label:'Preço', data:hP, borderColor:'#3b82f6'}, {label:'Custo', data:hC, borderColor:'#ef4444'}, {label:'Margem', data:hM, borderColor:'#10b981', yAxisID:'y1'}]}, options:{responsive:true, maintainAspectRatio:false, scales:{y:{position:'left'}, y1:{position:'right'}}} });
+    const aqt = document.getElementById('analiseQtdTotal'); if(aqt) aqt.innerText = u; 
+    const apm = document.getElementById('analisePrecoMedio'); if(apm) apm.innerText = `R$ ${pm.toFixed(2)}`; 
+    const amm = document.getElementById('analiseMargemMedia'); if(amm) { amm.innerText = `${mm.toFixed(2)}%`; amm.className = mm < 10 ? "text-2xl font-extrabold text-red-600 dark:text-red-400" : (mm <= 20 ? "text-2xl font-extrabold text-yellow-500 dark:text-yellow-400" : "text-2xl font-extrabold text-emerald-600 dark:text-emerald-400"); }
+    const cEl = document.getElementById('chartAnaliseSku');
+    if(cEl) {
+        if(chartAnalise) chartAnalise.destroy();
+        chartAnalise = new Chart(cEl.getContext('2d'), { type:'line', data:{labels:lx, datasets:[{label:'Preço', data:hP, borderColor:'#3b82f6'}, {label:'Custo', data:hC, borderColor:'#ef4444'}, {label:'Margem', data:hM, borderColor:'#10b981', yAxisID:'y1'}]}, options:{responsive:true, maintainAspectRatio:false, scales:{y:{position:'left'}, y1:{position:'right'}}} });
+    }
 }
 
 function gerarCanvasAreaTopo() {
     return new Promise((res, rej) => {
-        switchTab('dashboard'); window.scrollTo(0,0); const s = document.getElementById('secaoHistorico'), w = s.style.display !== 'none'; s.style.display = 'none';
-        const a = document.getElementById('areaExport'), oW = a.style.width, oP = a.style.padding, oB = a.style.backgroundColor, cW = a.offsetWidth || window.innerWidth;
+        switchTab('dashboard'); window.scrollTo(0,0); const s = document.getElementById('secaoHistorico'); const w = s ? s.style.display !== 'none' : false; if(s) s.style.display = 'none';
+        const a = document.getElementById('areaExport'); if(!a) return rej("Area not found");
+        const oW = a.style.width, oP = a.style.padding, oB = a.style.backgroundColor, cW = a.offsetWidth || window.innerWidth;
         a.style.width = cW+'px'; a.style.padding = '24px'; a.style.backgroundColor = isDarkMode?'#1f2937':'#f8fafc';
-        setTimeout(() => { html2canvas(a, {scale:2, useCORS:true, width:cW, windowWidth:cW}).then(c => { a.style.width=oW; a.style.padding=oP; a.style.backgroundColor=oB; if(w) s.style.display=''; res(c); }).catch(rej); }, 500);
+        setTimeout(() => { html2canvas(a, {scale:2, useCORS:true, width:cW, windowWidth:cW}).then(c => { a.style.width=oW; a.style.padding=oP; a.style.backgroundColor=oB; if(s && w) s.style.display=''; res(c); }).catch(rej); }, 500);
     });
 }
 function exportarRelatorioPNG() { mostrarLoading(); gerarCanvasAreaTopo().then(c => { const l=document.createElement('a'); l.download=`Relatorio.png`; l.href=c.toDataURL('image/png'); l.click(); esconderLoading(); }).catch(e=>esconderLoading()); }
@@ -192,43 +243,68 @@ const universalNumberParse = (val) => {
 };
 
 function aplicarFiltros() {
-    const a=document.getElementById('filtroAno').value, m=document.getElementById('filtroMes').value, o=document.getElementById('ordenacao').value, b=document.getElementById('buscaVendas').value.toLowerCase();
+    const fA = document.getElementById('filtroAno'), fM = document.getElementById('filtroMes'), fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas');
+    const a = fA ? fA.value : "TODOS", m = fM ? fM.value : "TODOS", o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : "";
     vendasFiltradasGlobal = vendasGlobais.filter(v => (a==="TODOS"||String(v.ano)===a) && (m==="TODOS"||String(v.mes)===m) && (b===""||String(v.nVenda).toLowerCase().includes(b)||String(v.sku).toLowerCase().includes(b)||String(v.descricao).toLowerCase().includes(b)));
     if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro);
     atualizarCardsPainel(vendasFiltradasGlobal); atualizarGrafico(vendasFiltradasGlobal); paginaAtualVendas=1; renderPaginaVendas(1);
 }
 function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
 function renderPaginaVendas(p) {
-    const tp=Math.ceil(vendasFiltradasGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualVendas=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaVendas'); tb.innerHTML='';
+    const tp=Math.ceil(vendasFiltradasGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualVendas=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaVendas'); if(tb) tb.innerHTML='';
     const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA);
-    if(!i.length) return tb.innerHTML=`<tr><td colspan="11" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`;
+    if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="11" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
     i.forEach(v => {
         const l=v.urlPlataforma?`<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500">${v.nVenda}</a>`:v.nVenda;
         const tr=document.createElement('tr'); tr.innerHTML=`<td class="p-4 text-xs">${v.mes.substring(0,3)}/${v.ano}</td><td class="p-4 truncate max-w-xs">${v.descricao}</td><td class="p-4">${v.status}</td><td class="p-4 text-center">${l}</td><td class="p-4 text-center">${v.qtd}</td><td class="p-4 text-right">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right">${formatMoney(v.sobra)}</td><td class="p-4 text-right">${formatMoney(v.custo)}</td><td class="p-4 text-right font-bold">${formatMoney(v.lucro)}</td><td class="p-4 text-right">${v.porcentagem.toFixed(2)}%</td><td class="p-4 admin-only"><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500">🗑️</button></td>`;
-        tb.appendChild(tr);
+        if(tb) tb.appendChild(tr);
     });
-    document.getElementById('lblPaginaVendas').innerText=paginaAtualVendas; document.getElementById('lblTotalPaginasVendas').innerText=tp;
-    document.getElementById('btnPrevVendas').disabled=paginaAtualVendas===1; document.getElementById('btnNextVendas').disabled=paginaAtualVendas===tp;
+    const lblP = document.getElementById('lblPaginaVendas'); if(lblP) lblP.innerText=paginaAtualVendas; 
+    const lblT = document.getElementById('lblTotalPaginasVendas'); if(lblT) lblT.innerText=tp;
+    const btnP = document.getElementById('btnPrevVendas'); if(btnP) btnP.disabled=paginaAtualVendas===1; 
+    const btnN = document.getElementById('btnNextVendas'); if(btnN) btnN.disabled=paginaAtualVendas===tp;
 }
-function atualizarCardsPainel(d) { let f=0, l=0; d.forEach(v=>{f+=v.valorVenda;l+=v.lucro;}); document.getElementById('totalFaturamento').innerText=formatMoney(f); document.getElementById('totalLucro').innerText=formatMoney(l); document.getElementById('mediaMargem').innerText=`${f>0?((l/f)*100).toFixed(2):0}%`; }
+function atualizarCardsPainel(d) { 
+    let f=0, l=0; d.forEach(v=>{f+=v.valorVenda;l+=v.lucro;}); 
+    const tf = document.getElementById('totalFaturamento'); if(tf) tf.innerText=formatMoney(f); 
+    const tl = document.getElementById('totalLucro'); if(tl) tl.innerText=formatMoney(l); 
+    const mm = document.getElementById('mediaMargem'); if(mm) mm.innerText=`${f>0?((l/f)*100).toFixed(2):0}%`; 
+}
 function atualizarGrafico(d) {
     const a={}; d.forEach(v=>{const l=`${v.mes.substring(0,3)} ${v.ano}`; if(!a[l])a[l]={f:0,l:0}; a[l].f+=v.valorVenda; a[l].l+=v.lucro;});
-    const l=Object.keys(a), c=document.getElementById('faturamentoChart').getContext('2d'); if(graficoInstance) graficoInstance.destroy();
+    const l=Object.keys(a); const cg = document.getElementById('faturamentoChart'); if(!cg) return;
+    const c=cg.getContext('2d'); if(graficoInstance) graficoInstance.destroy();
     graficoInstance = new Chart(c, {type:'bar', data:{labels:l, datasets:[{label:'Bruto', data:l.map(x=>a[x].f), backgroundColor:'#3b82f6'},{label:'Lucro', data:l.map(x=>a[x].l), backgroundColor:'#10b981'}]}, options:{responsive:true, maintainAspectRatio:false}});
 }
 
-function calcularMargemForm() { const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0; const t=q*v, s=t-(q*i), l=s-(q*c); document.getElementById('previewSobra').innerText=formatMoney(s); document.getElementById('previewLucro').innerText=formatMoney(l); document.getElementById('previewMargem').innerText=`${t>0?((l/t)*100).toFixed(2):0}%`; }
-function calcularSimuladores() { const c=Number(document.getElementById('calcCusto').value)||0, i=Number(document.getElementById('calcImposto').value)||0, cm=Number(document.getElementById('calcComissao').value)||0, f=Number(document.getElementById('calcFrete').value)||0, v=Number(document.getElementById('calcVenda').value)||0, m=Number(document.getElementById('calcMargemAlvo').value)||0; let lr=0, mr=0, ps=0, lp=0; if(v>0){lr=v-(v*(i/100))-(v*(cm/100))-f-c;mr=(lr/v)*100;} const s=(i/100)+(cm/100)+(m/100); if(s<1) {ps=(c+f)/(1-s);lp=ps*(m/100);} document.getElementById('simLucro1').innerText=formatMoney(lr); document.getElementById('simMargem1').innerText=`${mr.toFixed(2)}%`; document.getElementById('simPreco2').innerText=formatMoney(ps); document.getElementById('simLucro2').innerText=formatMoney(lp); }
-function limparSimulador() { ['calcVenda','calcCusto','calcImposto','calcComissao','calcFrete','calcMargemAlvo'].forEach(id=>document.getElementById(id).value=''); calcularSimuladores(); }
+function calcularMargemForm() { 
+    const q=Number(document.getElementById('quantidade')?.value)||1, v=Number(document.getElementById('valorUnitario')?.value)||0, i=Number(document.getElementById('imposto')?.value)||0, c=Number(document.getElementById('custo')?.value)||0; 
+    const t=q*v, s=t-(q*i), l=s-(q*c); 
+    const ps = document.getElementById('previewSobra'); if(ps) ps.innerText=formatMoney(s); 
+    const pl = document.getElementById('previewLucro'); if(pl) pl.innerText=formatMoney(l); 
+    const pm = document.getElementById('previewMargem'); if(pm) pm.innerText=`${t>0?((l/t)*100).toFixed(2):0}%`; 
+}
+function calcularSimuladores() { 
+    const c=Number(document.getElementById('calcCusto')?.value)||0, i=Number(document.getElementById('calcImposto')?.value)||0, cm=Number(document.getElementById('calcComissao')?.value)||0, f=Number(document.getElementById('calcFrete')?.value)||0, v=Number(document.getElementById('calcVenda')?.value)||0, m=Number(document.getElementById('calcMargemAlvo')?.value)||0; 
+    let lr=0, mr=0, ps=0, lp=0; if(v>0){lr=v-(v*(i/100))-(v*(cm/100))-f-c;mr=(lr/v)*100;} const s=(i/100)+(cm/100)+(m/100); if(s<1) {ps=(c+f)/(1-s);lp=ps*(m/100);} 
+    const sl1 = document.getElementById('simLucro1'); if(sl1) sl1.innerText=formatMoney(lr); 
+    const sm1 = document.getElementById('simMargem1'); if(sm1) sm1.innerText=`${mr.toFixed(2)}%`; 
+    const sp2 = document.getElementById('simPreco2'); if(sp2) sp2.innerText=formatMoney(ps); 
+    const sl2 = document.getElementById('simLucro2'); if(sl2) sl2.innerText=formatMoney(lp); 
+}
+function limparSimulador() { ['calcVenda','calcCusto','calcImposto','calcComissao','calcFrete','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
 
-document.getElementById('vendaForm').addEventListener('submit', async function(e) {
-    e.preventDefault(); mostrarLoading("Salvando...");
-    const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value;
-    const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${nv}`:'');
-    const t=q*v, s=t-(q*i), lu=s-(q*c);
-    const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
-    try { const { error } = await db.from('vendas').upsert(p, {onConflict:'plataforma,n_venda'}); if(error) throw error; limparRascunho(); await carregarDadosDaNuvem(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(e){showToast("Erro", "error");} finally {esconderLoading();}
-});
+const vendaF = document.getElementById('vendaForm');
+if(vendaF) {
+    vendaF.addEventListener('submit', async function(e) {
+        e.preventDefault(); mostrarLoading("Salvando...");
+        const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value;
+        const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${nv}`:'');
+        const t=q*v, s=t-(q*i), lu=s-(q*c);
+        const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
+        try { const { error } = await db.from('vendas').upsert(p, {onConflict:'plataforma,n_venda'}); if(error) throw error; limparRascunho(); await carregarDadosDaNuvem(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(e){showToast("Erro", "error");} finally {esconderLoading();}
+    });
+}
 
 async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN')return; if(!confirm("Apagar?"))return; mostrarLoading("Apagando..."); try { await db.from('vendas').delete().eq('id',id); await carregarDadosDaNuvem(); showToast("Excluído!","success"); } catch(e){} finally{esconderLoading();} }
 
@@ -242,28 +318,39 @@ function importarCsvSkus(e) {
             if(iS===-1 && iP===-1) throw new Error("Invalido");
             const p=[]; for(let i=1;i<l.length;i++){ if(!l[i].trim())continue; const c=l[i].split(l[0].includes(';')?';':','); if(c.length<2)continue; p.push({sku:iS>-1?c[iS].trim():'', produto:iP>-1?c[iP].trim():'', custo_atual:universalNumberParse(iC>-1?c[iC]:0), status:'Ativo'}); }
             if(p.length>0) { await db.from('custos_sku').upsert(p, {onConflict:'sku'}); await carregarDadosDaNuvem(); showToast("Importado!","success"); }
-        } catch(err){} finally{esconderLoading(); document.getElementById('fileImportSkuCsv').value='';}
+        } catch(err){} finally{esconderLoading(); const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value='';}
     }; r.readAsText(f);
 }
 function renderPaginaSkus(p) {
-    const b=document.getElementById('buscaSkus').value.toLowerCase(); skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b));
-    const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); tb.innerHTML='';
+    const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; 
+    skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b));
+    const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML='';
     skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => {
-        const tr=document.createElement('tr'); tr.innerHTML=`<td class="p-3">${s.SKU}</td><td class="p-3">${s.PRODUTO}</td><td class="p-3 text-right">${formatMoney(s.CUSTO_ANTERIOR)}</td><td class="p-3 text-right text-red-500 font-bold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-3 text-right">${formatMoney(s.CUSTO_MEDIO)}</td><td class="p-3 text-center">${s.STATUS}</td><td class="p-3 text-center admin-only"><button onclick="editarSku('${s.SKU}')" class="text-blue-500">✏️</button></td>`; tb.appendChild(tr);
+        const tr=document.createElement('tr'); tr.innerHTML=`<td class="p-3">${s.SKU}</td><td class="p-3">${s.PRODUTO}</td><td class="p-3 text-right">${formatMoney(s.CUSTO_ANTERIOR)}</td><td class="p-3 text-right text-red-500 font-bold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-3 text-right">${formatMoney(s.CUSTO_MEDIO)}</td><td class="p-3 text-center">${s.STATUS}</td><td class="p-3 text-center admin-only"><button onclick="editarSku('${s.SKU}')" class="text-blue-500">✏️</button></td>`; 
+        if(tb) tb.appendChild(tr);
     });
-    document.getElementById('lblPaginaSkus').innerText=paginaAtualSkus; document.getElementById('lblTotalPaginasSkus').innerText=tp;
+    const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; 
+    const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp;
 }
 function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
 function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
-document.getElementById('formCadastroSku').addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await db.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value, produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosDaNuvem(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} });
+
+const formSku = document.getElementById('formCadastroSku');
+if(formSku) {
+    formSku.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await db.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value, produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosDaNuvem(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} });
+}
 
 // Users
 function renderTabelaUsuarios() {
-    const tb=document.getElementById('tabelaUsuarios'); tb.innerHTML='';
+    const tb=document.getElementById('tabelaUsuarios'); if(!tb) return; tb.innerHTML='';
     usuariosGlobais.forEach(u => { const tr=document.createElement('tr'); tr.innerHTML=`<td class="p-3 font-bold">${u.usuario}</td><td class="p-3">${u.nome}</td><td class="p-3">${u.nivel}</td><td class="p-3 text-center"><button onclick="editarUsuario('${u.usuario}','${u.nome}','${u.nivel}')" class="text-blue-500">✏️</button></td><td class="p-3 text-center"><button onclick="deletarUsuario('${u.originalIndex}','${u.usuario}')" class="text-red-500">🗑️</button></td>`; tb.appendChild(tr); });
 }
 function editarUsuario(u,n,l) { document.getElementById('userForm_user').value=u; document.getElementById('userForm_nome').value=n; document.getElementById('userForm_nivel').value=l; document.getElementById('userForm_senha').value=''; window.scrollTo(0,0); }
-document.getElementById('formCadastroUser').addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { const u=document.getElementById('userForm_user').value, s=document.getElementById('userForm_senha').value; const p={usuario:u, nome:document.getElementById('userForm_nome').value, nivel:document.getElementById('userForm_nivel').value}; const {data}=await db.from('usuarios').select('id,senha').eq('usuario',u); if(s) p.senha=await hashSHA256(s); else if(data&&data.length>0) p.senha=data[0].senha; else p.senha=await hashSHA256(u); if(data&&data.length>0) await db.from('usuarios').update(p).eq('id',data[0].id); else await db.from('usuarios').insert([p]); document.getElementById('formCadastroUser').reset(); await carregarDadosDaNuvem(); showToast("Salvo!","success"); } catch(er){} finally{esconderLoading();} });
+
+const formUser = document.getElementById('formCadastroUser');
+if(formUser) {
+    formUser.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { const u=document.getElementById('userForm_user').value, s=document.getElementById('userForm_senha').value; const p={usuario:u, nome:document.getElementById('userForm_nome').value, nivel:document.getElementById('userForm_nivel').value}; const {data}=await db.from('usuarios').select('id,senha').eq('usuario',u); if(s) p.senha=await hashSHA256(s); else if(data&&data.length>0) p.senha=data[0].senha; else p.senha=await hashSHA256(u); if(data&&data.length>0) await db.from('usuarios').update(p).eq('id',data[0].id); else await db.from('usuarios').insert([p]); document.getElementById('formCadastroUser').reset(); await carregarDadosDaNuvem(); showToast("Salvo!","success"); } catch(er){} finally{esconderLoading();} });
+}
 async function deletarUsuario(id,u) { if(u===localStorage.getItem('app_auth_login'))return; if(!confirm("Apagar?"))return; mostrarLoading(); try { await db.from('usuarios').delete().eq('id',id); await carregarDadosDaNuvem(); } catch(e){} finally{esconderLoading();} }
 
 // Lote Import
@@ -275,25 +362,26 @@ function iniciarImportacao(e) {
         let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}}
         importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?String(h).trim():`Vazia_${i}`); importDataGlobal=[];
         for(let i=ml+1;i<rawDataGlobal.length;i++){let o={}, hd=false; rawDataGlobal[i].forEach((v,id)=>{o[importHeadersGlobal[id]]=v; if(String(v).trim()!=="")hd=true;}); if(hd)importDataGlobal.push(o);}
-        const dt=new Date(); document.getElementById('globalAno').value=dt.getFullYear(); document.getElementById('globalMes').value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; document.getElementById('globalPlataforma').value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto';
-        construirInterfaceMapeamento(); document.getElementById('modalMapeamento').classList.remove('hidden'); document.getElementById('fileImportData').value="";
+        const dt=new Date(); const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto';
+        construirInterfaceMapeamento(); const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); const fid = document.getElementById('fileImportData'); if(fid) fid.value="";
     }; r.readAsArrayBuffer(f);
 }
-function fecharModalMapeamento() { document.getElementById('modalMapeamento').classList.add('hidden'); }
+function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() {} function restaurarEstadoImportacao() {} function extrairMesAnoDaData(d) { if(!d)return null; let p=String(d).toLowerCase().split(' de '); if(p.length>=3) return {mes:p[1].trim().toUpperCase(), ano:parseInt(p[2].trim().substring(0,4))}; return null; }
 function extrairProdutosUnicos() {
-    const cd=document.getElementById('map_desc').value, cs=document.getElementById('map_sku').value, ac=document.getElementById('areaCustosDinamicos'), lc=document.getElementById('listaCustosProdutos'); lc.innerHTML='';
-    if(!cd) { ac.classList.add('hidden'); return; } const map={}; importDataGlobal.forEach(r=>{const d=r[cd]?String(r[cd]).trim():""; if(d&&!map[d])map[d]=cs&&r[cs]?String(r[cs]).trim().toUpperCase():"";});
+    const md = document.getElementById('map_desc'); const ms = document.getElementById('map_sku');
+    const cd=md?md.value:'', cs=ms?ms.value:''; const ac=document.getElementById('areaCustosDinamicos'), lc=document.getElementById('listaCustosProdutos'); if(lc) lc.innerHTML='';
+    if(!cd) { if(ac) ac.classList.add('hidden'); return; } const map={}; importDataGlobal.forEach(r=>{const d=r[cd]?String(r[cd]).trim():""; if(d&&!map[d])map[d]=cs&&r[cs]?String(r[cs]).trim().toUpperCase():"";});
     produtosUnicosGlobal=Object.keys(map); window.custosMapeadosLote={}; let hp="";
     produtosUnicosGlobal.forEach((p,i) => {
         let sc=0; const rsku=map[p];
         if(rsku&&catalogoSkus[rsku]) sc=catalogoSkus[rsku].custo_atual; else { const f=Object.keys(catalogoSkus).find(k=>catalogoSkus[k].produto.toLowerCase()===p.toLowerCase()); if(f) sc=catalogoSkus[f].custo_atual; }
         window.custosMapeadosLote[p]=sc; if(sc<=0) hp+=`<div class="flex justify-between p-2 border-b"><span class="text-xs truncate">${p}</span><input type="number" step="0.01" class="w-20 p-1 border text-xs" oninput="window.custosMapeadosLote['${p.replace(/'/g,"\\'")}']=Number(this.value)||0"></div>`;
     });
-    if(hp) { ac.classList.remove('hidden'); lc.innerHTML=hp; } else ac.classList.add('hidden');
+    if(hp) { if(ac) ac.classList.remove('hidden'); if(lc) lc.innerHTML=hp; } else { if(ac) ac.classList.add('hidden'); }
 }
 function construirInterfaceMapeamento() {
-    const c=document.getElementById('mapeamentoContainer'); c.innerHTML='';
+    const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML='';
     [{id:'map_data',l:'Data',s:['Data']}, {id:'map_sku',l:'SKU',s:['SKU']}, {id:'map_desc',l:'Descrição',s:['Título']}, {id:'map_nven',l:'Pedido',s:['N.º']}, {id:'map_qtd',l:'Qtd',s:['Unidade']}, {id:'map_status',l:'Status',s:['Estado']}, {id:'map_venda',l:'Venda (R$)',s:['Receita por pro']}, {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por env']}, {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de vend']}, {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de env']}, {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamento']}, {id:'map_total',l:'Total (R$)',s:['Total']}].forEach(f => {
         let h=`<div class="flex flex-col bg-white p-2 rounded border"><label class="text-xs font-bold">${f.l}</label><select id="${f.id}" onchange="if(this.id==='map_desc'||this.id==='map_sku')extrairProdutosUnicos()" class="p-1 outline-none text-xs border"><option value="">-- Ignorar --</option>`;
         importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${f.s.some(x=>hd.toLowerCase().includes(x.toLowerCase()))?'selected':''}>${hd}</option>`; });
@@ -302,8 +390,13 @@ function construirInterfaceMapeamento() {
 }
 async function processarEnvioEmLote() {
     mostrarLoading("Enviando Lote...");
-    const aG=document.getElementById('globalAno').value||new Date().getFullYear(), mG=document.getElementById('globalMes').value, pG=document.getElementById('globalPlataforma').value, impG=Number(document.getElementById('globalImposto').value)||0;
-    const cData=document.getElementById('map_data').value, cSku=document.getElementById('map_sku').value, cDesc=document.getElementById('map_desc').value, cNv=document.getElementById('map_nven').value, cQtd=document.getElementById('map_qtd').value, cSt=document.getElementById('map_status').value, cVen=document.getElementById('map_venda').value, cRe=document.getElementById('map_rec_envio').value, cTv=document.getElementById('map_tarifa_venda').value, cTe=document.getElementById('map_tarifa_envio').value, cEs=document.getElementById('map_estorno').value, cTot=document.getElementById('map_total').value;
+    const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), gpEl = document.getElementById('globalPlataforma'), giEl = document.getElementById('globalImposto');
+    const aG=gaEl?gaEl.value:new Date().getFullYear(), mG=gmEl?gmEl.value:'', pG=gpEl?gpEl.value:'', impG=Number(giEl?giEl.value:0)||0;
+    
+    const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cnvEl=document.getElementById('map_nven'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total');
+    
+    const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
+    
     let b=[], log=[], qN=0, qA=0;
     for(let r of importDataGlobal) {
         if(!r[cDesc]) continue;
@@ -318,7 +411,14 @@ async function processarEnvioEmLote() {
         b.push({ano:ad, mes:md, quantidade:q, descricao:ds, n_venda:nv, plataforma:pG, valor_venda:rp, sobra:sob, imposto:imp, custo:cst, lucro:luc, porcentagem:mar, sku:sk, status:st, estorno:es});
     }
     if(b.length>0) {
-        try { const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); if(error)throw error; document.getElementById('resumoLoteNovos').innerText=qN; document.getElementById('resumoLoteAtualizados').innerText=qA; document.getElementById('modalMapeamento').classList.add('hidden'); await carregarDadosDaNuvem(); document.getElementById('modalResumoLote').classList.remove('hidden'); } catch(e){}
+        try { 
+            const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); if(error)throw error; 
+            const rn=document.getElementById('resumoLoteNovos'); if(rn) rn.innerText=qN; 
+            const ra=document.getElementById('resumoLoteAtualizados'); if(ra) ra.innerText=qA; 
+            const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); 
+            await carregarDadosDaNuvem(); 
+            const rm=document.getElementById('modalResumoLote'); if(rm) rm.classList.remove('hidden'); 
+        } catch(e){}
     }
     esconderLoading();
 }
