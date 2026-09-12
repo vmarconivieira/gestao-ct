@@ -215,12 +215,14 @@
         <div id="modalMapeamento" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
                 <div class="flex justify-between"><h3 class="text-2xl font-bold dark:text-white">Mapear Colunas</h3><button onclick="fecharModalMapeamento()" class="text-red-500 text-xl font-bold">&times;</button></div>
+                
                 <div class="grid grid-cols-4 gap-4 my-6 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-gray-700">
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Plataforma</label><select id="globalPlataforma" onchange="salvarEstadoImportacao()" class="w-full p-2 rounded outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white"><option value="Mercado Livre">Mercado Livre</option><option value="Shopee">Shopee</option><option value="Direto">Direto</option></select></div>
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Ano</label><input type="number" id="globalAno" oninput="salvarEstadoImportacao()" class="w-full p-2 rounded outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white"></div>
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Mês</label><select id="globalMes" onchange="salvarEstadoImportacao()" class="w-full p-2 rounded outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white"><option value="JANEIRO">Jan</option><option value="FEVEREIRO">Fev</option><option value="MARÇO">Mar</option><option value="ABRIL">Abr</option><option value="MAIO">Mai</option><option value="JUNHO">Jun</option><option value="JULHO">Jul</option><option value="AGOSTO">Ago</option><option value="SETEMBRO">Set</option><option value="OUTUBRO">Out</option><option value="NOVEMBRO">Nov</option><option value="DEZEMBRO">Dez</option></select></div>
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Imposto %</label><input type="number" id="globalImposto" oninput="salvarEstadoImportacao()" class="w-full p-2 rounded outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white"></div>
                 </div>
+
                 <div class="grid grid-cols-4 gap-4 mb-6" id="mapeamentoContainer"></div>
                 <div id="areaCustosDinamicos" class="hidden bg-gray-50 dark:bg-gray-700 p-4 rounded-xl mb-6"><h4 class="font-bold dark:text-white text-sm">SKUs Sem Custo</h4><div id="listaCustosProdutos"></div></div>
                 <div class="text-right"><button onclick="processarEnvioEmLote()" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-full">Sincronizar</button></div>
