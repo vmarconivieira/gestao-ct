@@ -1,0 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+body { font-family: 'Nunito', sans-serif; }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-in { animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+@keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-5px); } 100% { transform: translateY(0px); } }
+.hover-float:hover { animation: float 2s ease-in-out infinite; }
+.loader { border-top-color: #ffffff; animation: spinner 1s ease-in-out infinite; }
+.loader-blue { border-top-color: #3b82f6; animation: spinner 1s ease-in-out infinite; }
+@keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.glass-panel { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.4); }
+.dark .glass-panel { background: rgba(31, 41, 55, 0.6); border: 1px solid rgba(255, 255, 255, 0.05); }
+.custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 9999px; }
+.dark .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; }
+input, select { transition: all 0.3s ease; }
+input:focus, select:focus { transform: scale(1.01); }
+#toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+.toast { min-width: 250px; padding: 16px 20px; border-radius: 12px; font-weight: 700; color: white; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.toast.success { background: linear-gradient(to right, #10b981, #059669); }
+.toast.error { background: linear-gradient(to right, #ef4444, #dc2626); }
+.toast.info { background: linear-gradient(to right, #3b82f6, #2563eb); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes fadeOut { to { opacity: 0; } }
