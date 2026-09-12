@@ -48,7 +48,7 @@
         <h2 id="globalOverlayText" class="text-center text-white text-xl font-extrabold animate-pulse">Processando...</h2>
     </div>
 
-    <!-- MODAL GERENCIAL PÓS-LOTE COM LOGS E SCROLL -->
+    <!-- MODAL GERENCIAL PÓS-LOTE -->
     <div id="modalResumoLote" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 p-5 md:p-6 rounded-3xl shadow-2xl w-full max-w-lg border border-gray-100 dark:border-gray-700 animate-fade-in flex flex-col max-h-[90vh]">
             <div class="text-center mb-4 shrink-0">
@@ -576,12 +576,7 @@
         const SUPABASE_URL = "https://jsoujnbaucvvwgfilnoc.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzb3VqbmJhdWN2dndnZmlsbm9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNDA5MzIsImV4cCI6MjEwNDcxNjkzMn0.l-dTfSmQzEsQF0AP-CPx0xZI9ox6hFyF4G8bDKSg7yw";
         
-        let supabase;
-        try {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        } catch(e) {
-            console.error("Falha ao inicializar o Supabase:", e);
-        }
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         
         let vendasGlobais = [];
         let vendasFiltradasGlobal = []; 
@@ -1235,7 +1230,7 @@
                 let payload = { usuario: userValue, nome: nomeVal, nivel: nivelVal };
                 if (passValue) payload.senha = await hashSHA256(passValue);
                 else if (existingUser && existingUser.length > 0) payload.senha = existingUser[0].senha;
-                else payload.senha = await hashSHA256(userValue); // Default
+                else payload.senha = await hashSHA256(userValue); 
 
                 if (existingUser && existingUser.length > 0) {
                     await supabase.from('usuarios').update(payload).eq('id', existingUser[0].id);
@@ -1663,6 +1658,30 @@
             link.click();
             document.body.removeChild(link);
         }
+
+        const universalNumberParse = (val) => { 
+            if (val === null || val === undefined || val === '') return 0; 
+            if (typeof val === 'number') return val; 
+            
+            let str = String(val).trim(); 
+            const isNegative = str.includes('-') || str.includes('–') || str.includes('−') || (str.startsWith('(') && str.endsWith(')'));
+            
+            str = str.replace(/[^0-9.,]/g, ''); 
+            if (str === '') return 0;
+
+            const lastCommaIndex = str.lastIndexOf(','); 
+            const lastDotIndex = str.lastIndexOf('.'); 
+            
+            if (lastCommaIndex > lastDotIndex) { 
+                str = str.replace(/\./g, ''); 
+                str = str.replace(',', '.'); 
+            } else if (lastDotIndex > lastCommaIndex && lastCommaIndex !== -1) { 
+                str = str.replace(/,/g, ''); 
+            } 
+            
+            const parsed = parseFloat(str) || 0; 
+            return isNegative ? -Math.abs(parsed) : Math.abs(parsed);
+        };
 
         async function processarEnvioEmLote() {
             mostrarLoading("Processando Lote via Supabase...");
