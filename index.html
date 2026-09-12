@@ -150,7 +150,7 @@
                 
                 <div class="flex items-center justify-center mt-2 mb-1">
                     <span id="loginStatusDot" class="w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse shadow-[0_0_8px_rgba(250,204,21,0.8)]"></span>
-                    <span id="loginStatusText" class="text-xs text-blue-100 dark:text-gray-300 font-semibold tracking-wide">Aguardando...</span>
+                    <span id="loginStatusText" class="text-xs text-blue-100 dark:text-gray-300 font-semibold tracking-wide">Testando conexão...</span>
                 </div>
 
                 <button type="submit" id="btnLogin" disabled class="w-full bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 flex justify-center items-center opacity-50 cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-lg">
@@ -576,12 +576,7 @@
         const SUPABASE_URL = "https://jsoujnbaucvvwgfilnoc.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzb3VqbmJhdWN2dndnZmlsbm9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNDA5MzIsImV4cCI6MjEwNDcxNjkzMn0.l-dTfSmQzEsQF0AP-CPx0xZI9ox6hFyF4G8bDKSg7yw";
         
-        let supabase;
-        try {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        } catch(e) {
-            console.error("Falha ao inicializar o Supabase:", e);
-        }
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         
         let vendasGlobais = [];
         let vendasFiltradasGlobal = []; 
@@ -1641,6 +1636,27 @@
                 areaCustos.classList.add('hidden');
             }
             salvarEstadoImportacao();
+        }
+
+        function exportarSKUsSemCusto() {
+            if(!window.itensSemCustoParaExportar || window.itensSemCustoParaExportar.length === 0) {
+                showToast('Nenhum item pendente para exportar.', 'info');
+                return;
+            }
+            let csvContent = "SKU;PRODUTO;CUSTO_ATUAL\n";
+            window.itensSemCustoParaExportar.forEach(item => {
+                let safeName = item.produto.replace(/"/g, '""');
+                csvContent += `${item.sku};"${safeName}";0\n`;
+            });
+            
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `produtos_sem_custo_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         async function processarEnvioEmLote() {
