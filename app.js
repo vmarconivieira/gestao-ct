@@ -376,14 +376,14 @@ function extrairProdutosUnicos() {
     produtosUnicosGlobal.forEach((p,i) => {
         let sc=0; const rsku=map[p];
         if(rsku&&catalogoSkus[rsku]) sc=catalogoSkus[rsku].custo_atual; else { const f=Object.keys(catalogoSkus).find(k=>catalogoSkus[k].produto.toLowerCase()===p.toLowerCase()); if(f) sc=catalogoSkus[f].custo_atual; }
-        window.custosMapeadosLote[p]=sc; if(sc<=0) hp+=`<div class="flex justify-between p-2 border-b"><span class="text-xs truncate">${p}</span><input type="number" step="0.01" class="w-20 p-1 border text-xs" oninput="window.custosMapeadosLote['${p.replace(/'/g,"\\'")}']=Number(this.value)||0"></div>`;
+        window.custosMapeadosLote[p]=sc; if(sc<=0) hp+=`<div class="flex justify-between p-2 border-b dark:border-gray-600"><span class="text-xs truncate dark:text-gray-300">${p}</span><input type="number" step="0.01" class="w-20 p-1 border text-xs dark:bg-gray-700 dark:border-gray-500 dark:text-white" oninput="window.custosMapeadosLote['${p.replace(/'/g,"\\'")}']=Number(this.value)||0"></div>`;
     });
     if(hp) { if(ac) ac.classList.remove('hidden'); if(lc) lc.innerHTML=hp; } else { if(ac) ac.classList.add('hidden'); }
 }
 function construirInterfaceMapeamento() {
     const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML='';
     [{id:'map_data',l:'Data',s:['Data']}, {id:'map_sku',l:'SKU',s:['SKU']}, {id:'map_desc',l:'Descrição',s:['Título']}, {id:'map_nven',l:'Pedido',s:['N.º']}, {id:'map_qtd',l:'Qtd',s:['Unidade']}, {id:'map_status',l:'Status',s:['Estado']}, {id:'map_venda',l:'Venda (R$)',s:['Receita por pro']}, {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por env']}, {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de vend']}, {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de env']}, {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamento']}, {id:'map_total',l:'Total (R$)',s:['Total']}].forEach(f => {
-        let h=`<div class="flex flex-col bg-white p-2 rounded border"><label class="text-xs font-bold">${f.l}</label><select id="${f.id}" onchange="if(this.id==='map_desc'||this.id==='map_sku')extrairProdutosUnicos()" class="p-1 outline-none text-xs border"><option value="">-- Ignorar --</option>`;
+        let h=`<div class="flex flex-col bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-700"><label class="text-xs font-bold text-gray-600 dark:text-gray-400">${f.l}</label><select id="${f.id}" onchange="if(this.id==='map_desc'||this.id==='map_sku')extrairProdutosUnicos()" class="p-1.5 outline-none text-xs border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 dark:text-white rounded mt-1"><option value="">-- Ignorar --</option>`;
         importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${f.s.some(x=>hd.toLowerCase().includes(x.toLowerCase()))?'selected':''}>${hd}</option>`; });
         c.innerHTML+=h+'</select></div>';
     }); extrairProdutosUnicos();
