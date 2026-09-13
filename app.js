@@ -663,8 +663,10 @@ async function processarEnvioEmLote() {
         if(canc){rp=0;imp=0;cst=0;}
         let sob=trep-imp, luc=sob-cst, mar=rp>0?luc/rp:0;
         
-        let key = `${pG}_${nv}`;
-        let exv = vendasGlobais.some(v => v.nVenda === nv && v.plataforma === pG);
+        // CHAVE ÚNICA CORRIGIDA: Plataforma + Pedido + Descrição (Para kits ou pedidos múltiplos do ML não se apagarem)
+        let key = `${pG}_${nv}_${ds}`.toLowerCase();
+        
+        let exv = vendasGlobais.some(v => v.nVenda === nv && v.plataforma === pG && String(v.descricao).toLowerCase() === ds.toLowerCase());
         if(exv) qA++; else qN++;
         
         mapVendas[key] = {
@@ -678,7 +680,7 @@ async function processarEnvioEmLote() {
     
     if(b.length>0) {
         try { 
-            const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); 
+            const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda,descricao'}); 
             if(error) throw error; 
             const rn=document.getElementById('resumoLoteNovos'); if(rn) rn.innerText=qN; 
             const ra=document.getElementById('resumoLoteAtualizados'); if(ra) ra.innerText=qA; 
