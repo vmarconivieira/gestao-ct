@@ -333,7 +333,9 @@ function importarCsvSkus(e) {
             const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>String(x).includes("CUSTO"));
             if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido. Faltam colunas SKU ou PRODUTO.");
             
-            const p=[]; 
+            // Aqui está a mágica: Usamos um objeto para unificar SKUs repetidos na mesma planilha
+            const mapSkus = {}; 
+            
             for(let i=1;i<rawData.length;i++){ 
                 const row = rawData[i];
                 if(row.filter(c=>String(c).trim()!=="").length === 0) continue; 
@@ -344,13 +346,18 @@ function importarCsvSkus(e) {
                 
                 let valStr = iC>-1 ? row[iC] : 0;
                 
-                p.push({ 
+                // Se houver duplicada, ele sobrescreve mantendo a última leitura
+                mapSkus[skuCode] = { 
                     sku: skuCode, 
                     produto: prodName || skuCode, 
                     custo_atual: universalNumberParse(valStr), 
                     status:'Ativo' 
-                }); 
+                }; 
             }
+            
+            // Converte o objeto de volta para uma lista limpa e sem duplicatas
+            const p = Object.values(mapSkus);
+            
             if(p.length>0) { 
                 const { error } = await db.from('custos_sku').upsert(p, {onConflict:'sku'}); 
                 if(error) throw new Error("Erro no Supabase: " + error.message);
