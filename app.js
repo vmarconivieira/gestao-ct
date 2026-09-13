@@ -13,6 +13,7 @@ let isDarkMode = false, isFetching = false;
 let paginaAtualVendas = 1, paginaAtualSkus = 1;
 const ITENS_POR_PAGINA = 50;
 let rawDataGlobal = [], importDataGlobal = [], importHeadersGlobal = [], produtosUnicosGlobal = [];
+let skusParaImportarGlobal = []; // Array temporário para a janela de Preview de SKUs
 
 async function hashSHA256(str) {
     if (window.crypto && window.crypto.subtle) {
@@ -265,7 +266,7 @@ function renderPaginaVendas(p) {
         else corMargem = "text-emerald-600 dark:text-emerald-400 font-extrabold";
         
         const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors";
-        tr.innerHTML=`<td class="p-4 text-xs text-gray-500">${v.mes.substring(0,3)}/${v.ano}</td><td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao} ${v.sku ? `<div class="text-[10px] text-gray-500 font-mono font-normal mt-0.5">${v.sku}</div>` : ''}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td><td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td><td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td><td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td><td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td><td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td><td class="p-4 text-right ${corMargem}">${v.porcentagem.toFixed(2)}%</td><td class="p-4 admin-only text-center"><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`;
+        tr.innerHTML=`<td class="p-4 text-xs text-gray-500">${v.mes.substring(0,3)}/${v.ano}</td><td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao} ${v.sku ? `<div class="text-[10px] text-gray-500 font-mono font-normal mt-0.5">${v.sku}</div>` : ''}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td><td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td><td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td><td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td><td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td><td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td><td class="p-4 text-right ${corMargem}">${v.porcentagem.toFixed(2)}%</td><td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`;
         if(tb) tb.appendChild(tr);
     });
     const lblP = document.getElementById('lblPaginaVendas'); if(lblP) lblP.innerText=paginaAtualVendas; 
@@ -319,11 +320,11 @@ async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')
 
 // SKUs
 function importarCsvSkus(e) {
-    const f=e.target.files[0]; if(!f) return; mostrarLoading("Lendo CSV com Motor Avançado..."); const r=new FileReader();
-    r.onload=async function(ev) {
+    const f=e.target.files[0]; if(!f) return; mostrarLoading("Lendo Arquivo..."); 
+    
+    const processar = async (csvText) => {
         try {
-            const d=new Uint8Array(ev.target.result); 
-            const w=XLSX.read(d,{type:'array'}); 
+            const w=XLSX.read(csvText,{type:'string'}); 
             const s=w.Sheets[w.SheetNames[0]]; 
             const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
             
@@ -346,23 +347,67 @@ function importarCsvSkus(e) {
                 mapSkus[skuCode] = { sku: skuCode, produto: prodName || skuCode, custo_atual: universalNumberParse(valStr), status:'Ativo' }; 
             }
             
-            const p = Object.values(mapSkus);
-            if(p.length>0) { 
-                const { error } = await db.from('custos_sku').upsert(p, {onConflict:'sku'}); 
-                if(error) throw new Error("Erro no Supabase: " + error.message);
-                await carregarDadosDaNuvem(); 
-                showToast(p.length + " SKUs importados com sucesso!", "success"); 
+            skusParaImportarGlobal = Object.values(mapSkus);
+            
+            if(skusParaImportarGlobal.length>0) { 
+                const tb = document.getElementById('tabelaPreviewSkuData');
+                if(tb) {
+                    tb.innerHTML = '';
+                    let limit = Math.min(3, skusParaImportarGlobal.length);
+                    for(let i=0; i<limit; i++) {
+                        let item = skusParaImportarGlobal[i];
+                        tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50">
+                            <td class="p-4 font-mono text-[10px] font-bold text-gray-500">${item.sku}</td>
+                            <td class="p-4 truncate max-w-[200px] font-semibold">${item.produto}</td>
+                            <td class="p-4 text-right font-extrabold text-red-500">${formatMoney(item.custo_atual)}</td>
+                        </tr>`;
+                    }
+                }
+                esconderLoading();
+                const modPreview = document.getElementById('modalPreviewSku');
+                if(modPreview) modPreview.classList.remove('hidden');
             } else {
                 throw new Error("Nenhum dado válido encontrado nas linhas.");
             }
         } catch(err){
+            esconderLoading();
             showToast(err.message, "error");
         } finally{
-            esconderLoading(); 
             const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value='';
         }
-    }; r.readAsArrayBuffer(f);
+    };
+
+    const r = new FileReader();
+    r.onload = function(ev) {
+        let text = ev.target.result;
+        if(text.includes('')) {
+            const r2 = new FileReader();
+            r2.onload = e2 => processar(e2.target.result);
+            r2.readAsText(f, 'windows-1252');
+        } else {
+            processar(text);
+        }
+    };
+    r.readAsText(f, 'UTF-8');
 }
+
+async function confirmarImportacaoSkus() {
+    const modPreview = document.getElementById('modalPreviewSku');
+    if(modPreview) modPreview.classList.add('hidden');
+    mostrarLoading("Sincronizando no Supabase...");
+    try {
+        const { error } = await db.from('custos_sku').upsert(skusParaImportarGlobal, {onConflict:'sku'}); 
+        if(error) throw new Error("Erro no Supabase: " + error.message);
+        await carregarDadosDaNuvem(); 
+        showToast(skusParaImportarGlobal.length + " SKUs importados com sucesso!", "success"); 
+        skusParaImportarGlobal = [];
+    } catch(e) {
+        showToast(e.message, "error");
+    } finally {
+        esconderLoading();
+    }
+}
+
 function renderPaginaSkus(p) {
     const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; 
     skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b));
@@ -372,7 +417,7 @@ function renderPaginaSkus(p) {
         let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400";
 
         const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors";
-        tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only"><button onclick="editarSku('${s.SKU}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors">✏️</button></td>`; 
+        tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; 
         if(tb) tb.appendChild(tr);
     });
     const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; 
@@ -382,6 +427,18 @@ function renderPaginaSkus(p) {
 }
 function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
 function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
+
+async function deletarSku(skuCode) { 
+    if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; 
+    if(!confirm(`Tem certeza que deseja apagar o produto SKU: ${skuCode}?`)) return; 
+    mostrarLoading("Apagando SKU..."); 
+    try { 
+        await db.from('custos_sku').delete().eq('sku', skuCode); 
+        await carregarDadosDaNuvem(); 
+        showToast("SKU Excluído!","success"); 
+    } catch(e) { showToast("Erro ao excluir", "error"); } 
+    finally { esconderLoading(); } 
+}
 
 const formSku = document.getElementById('formCadastroSku');
 if(formSku) {
@@ -401,23 +458,62 @@ if(formUser) {
 }
 async function deletarUsuario(id,u) { if(u===localStorage.getItem('app_auth_login'))return showToast("Você não pode se excluir.","error"); if(!confirm("Apagar?"))return; mostrarLoading(); try { await db.from('usuarios').delete().eq('id',id); await carregarDadosDaNuvem(); } catch(e){} finally{esconderLoading();} }
 
-// Lote Import
+// Lote Import Vendas
 function iniciarImportacao(e) {
-    const f=e.target.files[0]; if(!f)return; const r=new FileReader();
-    r.onload=function(ev) {
-        const d=new Uint8Array(ev.target.result), w=XLSX.read(d,{type:'array'}), s=w.Sheets[w.SheetNames[0]]; rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
+    const f=e.target.files[0]; if(!f)return; 
+    
+    const processar = (csvText) => {
+        const w=XLSX.read(csvText,{type:'string'}); 
+        const s=w.Sheets[w.SheetNames[0]]; 
+        rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
         if(rawDataGlobal.length===0) return showToast("Vazio","error");
         let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}}
         importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?String(h).trim():`Vazia_${i}`); importDataGlobal=[];
         for(let i=ml+1;i<rawDataGlobal.length;i++){let o={}, hd=false; rawDataGlobal[i].forEach((v,id)=>{o[importHeadersGlobal[id]]=v; if(String(v).trim()!=="")hd=true;}); if(hd)importDataGlobal.push(o);}
         const dt=new Date(); const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto';
         construirInterfaceMapeamento(); const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); const fid = document.getElementById('fileImportData'); if(fid) fid.value="";
-    }; r.readAsArrayBuffer(f);
+    };
+
+    const r = new FileReader();
+    r.onload = function(ev) {
+        let text = ev.target.result;
+        if(text.includes('')) {
+            const r2 = new FileReader();
+            r2.onload = e2 => processar(e2.target.result);
+            r2.readAsText(f, 'windows-1252');
+        } else {
+            processar(text);
+        }
+    };
+    r.readAsText(f, 'UTF-8');
 }
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
 function restaurarEstadoImportacao() {} 
-function extrairMesAnoDaData(d) { if(!d)return null; let p=String(d).toLowerCase().split(' de '); if(p.length>=3) return {mes:p[1].trim().toUpperCase(), ano:parseInt(p[2].trim().substring(0,4))}; return null; }
+
+// Extrator Robusto de Datas (Atende ML, Shopee, Padrão BR)
+function extrairMesAnoDaData(d) { 
+    if(!d) return null; 
+    let str = String(d).toLowerCase().trim();
+    let p = str.split(' de '); 
+    if(p.length >= 3) {
+        const mapMes = {"janeiro":"JANEIRO","fevereiro":"FEVEREIRO","março":"MARÇO","abril":"ABRIL","maio":"MAIO","junho":"JUNHO","julho":"JULHO","agosto":"AGOSTO","setembro":"SETEMBRO","outubro":"OUTUBRO","novembro":"NOVEMBRO","dezembro":"DEZEMBRO"};
+        let mesStr = p[1].trim();
+        let m = mapMes[mesStr] || mesStr.toUpperCase();
+        return { mes: m, ano: parseInt(p[2].trim().substring(0,4)) }; 
+    }
+    let regBr = str.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if(regBr) {
+        const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
+        return { mes: mArr[parseInt(regBr[2])-1], ano: parseInt(regBr[3]) };
+    }
+    let regInt = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if(regInt) {
+        const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
+        return { mes: mArr[parseInt(regInt[2])-1], ano: parseInt(regInt[1]) };
+    }
+    return null; 
+}
 
 function extrairProdutosUnicos() {
     const md = document.getElementById('map_desc'); const ms = document.getElementById('map_sku');
@@ -486,13 +582,28 @@ function renderPreviewImportacao() {
 }
 
 function atualizarMapeamentoDinamico() {
+    const cdEl = document.getElementById('map_data');
+    const gAno = document.getElementById('globalAno');
+    const gMes = document.getElementById('globalMes');
+    const indData = document.getElementById('indDataAutomatica');
+    
+    if(cdEl && cdEl.value) {
+        if(gAno) gAno.disabled = true;
+        if(gMes) gMes.disabled = true;
+        if(indData) indData.classList.remove('hidden');
+    } else {
+        if(gAno) gAno.disabled = false;
+        if(gMes) gMes.disabled = false;
+        if(indData) indData.classList.add('hidden');
+    }
+
     extrairProdutosUnicos();
     renderPreviewImportacao();
 }
 
 function construirInterfaceMapeamento() {
     const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML='';
-    [{id:'map_data',l:'Data',s:['Data']}, {id:'map_sku',l:'SKU',s:['SKU']}, {id:'map_desc',l:'Descrição',s:['Título']}, {id:'map_nven',l:'Pedido',s:['N.º']}, {id:'map_qtd',l:'Qtd',s:['Unidade']}, {id:'map_status',l:'Status',s:['Estado']}, {id:'map_venda',l:'Venda (R$)',s:['Receita por pro']}, {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por env']}, {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de vend']}, {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de env']}, {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamento']}, {id:'map_total',l:'Total (R$)',s:['Total']}].forEach(f => {
+    [{id:'map_data',l:'Data',s:['Data', 'Data da venda']}, {id:'map_sku',l:'SKU',s:['SKU']}, {id:'map_desc',l:'Descrição',s:['Título', 'Descrição']}, {id:'map_nven',l:'Pedido',s:['N.º', 'Pedido']}, {id:'map_qtd',l:'Qtd',s:['Unidade', 'Qtd']}, {id:'map_status',l:'Status',s:['Estado', 'Status']}, {id:'map_venda',l:'Venda (R$)',s:['Receita por pro', 'Venda', 'Bruto']}, {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por env']}, {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de vend', 'Taxa']}, {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de env', 'Frete']}, {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamento', 'Estorno']}, {id:'map_total',l:'Total (R$)',s:['Total']}].forEach(f => {
         let h=`<div class="flex flex-col bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm"><label class="text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">${f.l}</label><select id="${f.id}" onchange="atualizarMapeamentoDinamico()" class="p-2.5 outline-none text-xs border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"><option value="">-- Ignorar --</option>`;
         importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${f.s.some(x=>hd.toLowerCase().includes(x.toLowerCase()))?'selected':''}>${hd}</option>`; });
         c.innerHTML+=h+'</select></div>';
