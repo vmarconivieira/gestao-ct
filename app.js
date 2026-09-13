@@ -15,11 +15,33 @@ const ITENS_POR_PAGINA = 50;
 let rawDataGlobal = [], importDataGlobal = [], importHeadersGlobal = [], produtosUnicosGlobal = [];
 let skusParaImportarGlobal = [];
 
-// FUNÇÃO MÁGICA QUE CORRIGE CARACTERES E ACENTOS
-function fixText(s) { 
-    if(!s || typeof s !== 'string') return s; 
-    try { return decodeURIComponent(escape(s)); } 
-    catch(e) { return s; } 
+// MOTOR UNIVERSAL DE LEITURA (Excel, CSV ANSI e CSV UTF-8)
+function lerPlanilha(f, callback, errorCallback) {
+    try {
+        if (f.name.toLowerCase().endsWith('.csv')) {
+            const r = new FileReader();
+            r.onload = function(ev) {
+                let text = ev.target.result;
+                if (text.includes('')) { 
+                    const r2 = new FileReader();
+                    r2.onload = e2 => { try { callback(XLSX.read(e2.target.result, {type: 'string'})); } catch(err) { errorCallback(err); } };
+                    r2.readAsText(f, 'windows-1252');
+                } else {
+                    try { callback(XLSX.read(text, {type: 'string'})); } catch(err) { errorCallback(err); }
+                }
+            };
+            r.readAsText(f, 'UTF-8');
+        } else {
+            const r = new FileReader();
+            r.onload = function(ev) {
+                try {
+                    const data = new Uint8Array(ev.target.result);
+                    callback(XLSX.read(data, {type: 'array'}));
+                } catch(err) { errorCallback(err); }
+            };
+            r.readAsArrayBuffer(f);
+        }
+    } catch(err) { errorCallback(err); }
 }
 
 async function hashSHA256(str) {
@@ -327,18 +349,18 @@ async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')
 
 // SKUs
 function importarCsvSkus(e) {
-    const f=e.target.files[0]; if(!f) return; mostrarLoading("Lendo Arquivo..."); 
+    const f=e.target.files[0]; if(!f) return; 
+    mostrarLoading("Lendo Arquivo de SKUs..."); 
     
-    const processar = async (csvText) => {
+    lerPlanilha(f, (w) => {
         try {
-            const w=XLSX.read(csvText,{type:'string'}); 
             const s=w.Sheets[w.SheetNames[0]]; 
             const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
             
             if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados.");
             
-            const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase());
-            const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO"));
+            const h = rawData[0].map(x=>String(x).trim().toUpperCase());
+            const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>String(x).includes("CUSTO"));
             if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido. Faltam colunas SKU ou PRODUTO.");
             
             const mapSkus = {}; 
@@ -346,8 +368,8 @@ function importarCsvSkus(e) {
                 const row = rawData[i];
                 if(row.filter(c=>String(c).trim()!=="").length === 0) continue; 
                 
-                let prodName = iP>-1 ? fixText(String(row[iP])).trim() : '';
-                let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase();
+                let prodName = iP>-1 ? String(row[iP]).trim() : '';
+                let skuCode = iS>-1 && String(row[iS]).trim() !== "" ? String(row[iS]).trim().toUpperCase() : prodName.toUpperCase();
                 if(!skuCode) continue; 
                 
                 let valStr = iC>-1 ? row[iC] : 0;
@@ -382,14 +404,11 @@ function importarCsvSkus(e) {
         } finally{
             const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value='';
         }
-    };
-
-    const r = new FileReader();
-    r.onload = function(ev) {
-        let text = ev.target.result;
-        processar(text);
-    };
-    r.readAsArrayBuffer(f);
+    }, (err) => {
+        esconderLoading();
+        showToast("Erro ao ler arquivo: " + err.message, "error");
+        const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value='';
+    });
 }
 
 async function confirmarImportacaoSkus() {
@@ -461,37 +480,46 @@ async function deletarUsuario(id,u) { if(u===localStorage.getItem('app_auth_logi
 
 // Lote Import Vendas
 function iniciarImportacao(e) {
-    const f=e.target.files[0]; if(!f)return; mostrarLoading("Analisando planilha...");
+    const f=e.target.files[0]; if(!f) return; 
+    mostrarLoading("Analisando Vendas...");
     
-    const processar = (csvText) => {
-        const w=XLSX.read(csvText,{type:'string'}); 
+    lerPlanilha(f, (w) => {
         const s=w.Sheets[w.SheetNames[0]]; 
         rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
-        if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Vazio","error"); }
-        let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}}
-        importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?fixText(String(h)).trim():`Vazia_${i}`); 
+        if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Planilha vazia","error"); }
+        
+        let ml=0, mp=0; 
+        for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){
+            let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; 
+            if(p>mp){mp=p;ml=i;}
+        }
+        
+        importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?String(h).trim():`Vazia_${i}`); 
         importDataGlobal=[];
         for(let i=ml+1;i<rawDataGlobal.length;i++){
             let o={}, hd=false; 
             rawDataGlobal[i].forEach((v,id)=>{
-                let val = (typeof v === 'string') ? fixText(v) : v;
-                o[importHeadersGlobal[id]]=val; 
-                if(String(val).trim()!=="") hd=true;
+                o[importHeadersGlobal[id]]=v; 
+                if(String(v).trim()!=="") hd=true;
             }); 
-            if(hd)importDataGlobal.push(o);
+            if(hd) importDataGlobal.push(o);
         }
-        const dt=new Date(); const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto';
-        construirInterfaceMapeamento(); const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); const fid = document.getElementById('fileImportData'); if(fid) fid.value="";
+        
+        const dt=new Date(); 
+        const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); 
+        const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; 
+        const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto';
+        
+        construirInterfaceMapeamento(); 
+        const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); 
+        const fid = document.getElementById('fileImportData'); if(fid) fid.value="";
         esconderLoading();
-    };
-
-    const r = new FileReader();
-    r.onload = function(ev) {
-        let text = ev.target.result;
-        processar(text);
-    };
-    r.readAsArrayBuffer(f);
+    }, (err) => {
+        esconderLoading();
+        showToast("Erro ao ler arquivo: " + err.message, "error");
+    });
 }
+
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
 function restaurarEstadoImportacao() {} 
@@ -617,7 +645,7 @@ function construirInterfaceMapeamento() {
 }
 
 async function processarEnvioEmLote() {
-    mostrarLoading("Enviando Lote...");
+    mostrarLoading("Sincronizando Lote...");
     const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), gpEl = document.getElementById('globalPlataforma'), giEl = document.getElementById('globalImposto');
     const aG=gaEl?gaEl.value:new Date().getFullYear(), mG=gmEl?gmEl.value:'', pG=gpEl?gpEl.value:'', impG=Number(giEl?giEl.value:0)||0;
     
@@ -625,7 +653,7 @@ async function processarEnvioEmLote() {
     
     const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
     
-    let b=[], log=[], qN=0, qA=0;
+    let b=[], qN=0, qA=0;
     for(let r of importDataGlobal) {
         if(!r[cDesc]) continue;
         let md=mG, ad=aG; if(cData&&r[cData]){const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;}}
@@ -638,15 +666,22 @@ async function processarEnvioEmLote() {
         let exv=vendasGlobais.some(v=>v.nVenda===nv&&v.plataforma===pG); if(exv)qA++;else qN++;
         b.push({ano:ad, mes:md, quantidade:q, descricao:ds, n_venda:nv, plataforma:pG, valor_venda:rp, sobra:sob, imposto:imp, custo:cst, lucro:luc, porcentagem:mar, sku:sk, status:st, estorno:es});
     }
+    
     if(b.length>0) {
         try { 
-            const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); if(error)throw error; 
+            const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); 
+            if(error) throw error; 
             const rn=document.getElementById('resumoLoteNovos'); if(rn) rn.innerText=qN; 
             const ra=document.getElementById('resumoLoteAtualizados'); if(ra) ra.innerText=qA; 
             const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); 
             await carregarDadosDaNuvem(); 
             const rm=document.getElementById('modalResumoLote'); if(rm) rm.classList.remove('hidden'); 
-        } catch(e){}
+        } catch(e) {
+            console.error(e);
+            showToast("Erro na importação: " + (e.message || "Falha ao enviar ao banco."), "error");
+        }
+    } else {
+        showToast("Nenhuma linha de venda válida selecionada.", "error");
     }
     esconderLoading();
 }
