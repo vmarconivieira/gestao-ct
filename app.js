@@ -15,13 +15,6 @@ const ITENS_POR_PAGINA = 50;
 let rawDataGlobal = [], importDataGlobal = [], importHeadersGlobal = [], produtosUnicosGlobal = [];
 let skusParaImportarGlobal = [];
 
-// FUNÇÃO MÁGICA QUE CORRIGE ACENTOS E CARACTERES ESPECIAIS
-function fixText(s) { 
-    if(!s || typeof s !== 'string') return s; 
-    try { return decodeURIComponent(escape(s)); } 
-    catch(e) { return s; } 
-}
-
 // MOTOR UNIVERSAL DE LEITURA (Excel, CSV ANSI e CSV UTF-8)
 function lerPlanilha(f, callback, errorCallback) {
     try {
@@ -360,8 +353,8 @@ function importarCsvSkus(e) {
             
             if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados.");
             
-            const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase());
-            const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO"));
+            const h = rawData[0].map(x=>String(x).trim().toUpperCase());
+            const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>String(x).includes("CUSTO"));
             if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido. Faltam colunas SKU ou PRODUTO.");
             
             const mapSkus = {}; 
@@ -369,8 +362,8 @@ function importarCsvSkus(e) {
                 const row = rawData[i];
                 if(row.filter(c=>String(c).trim()!=="").length === 0) continue; 
                 
-                let prodName = iP>-1 ? fixText(String(row[iP])).trim() : '';
-                let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase();
+                let prodName = iP>-1 ? String(row[iP]).trim() : '';
+                let skuCode = iS>-1 && String(row[iS]).trim() !== "" ? String(row[iS]).trim().toUpperCase() : prodName.toUpperCase();
                 if(!skuCode) continue; 
                 
                 let valStr = iC>-1 ? row[iC] : 0;
@@ -496,14 +489,13 @@ function iniciarImportacao(e) {
                 if(p>mp){mp=p;ml=i;}
             }
             
-            importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?fixText(String(h)).trim():`Vazia_${i}`); 
+            importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?String(h).trim():`Vazia_${i}`); 
             importDataGlobal=[];
             for(let i=ml+1;i<rawDataGlobal.length;i++){
                 let o={}, hd=false; 
                 rawDataGlobal[i].forEach((v,id)=>{
-                    let val = (typeof v === 'string') ? fixText(v) : v;
-                    o[importHeadersGlobal[id]]=val; 
-                    if(String(val).trim()!=="") hd=true;
+                    o[importHeadersGlobal[id]]=v; 
+                    if(String(v).trim()!=="") hd=true;
                 }); 
                 if(hd) importDataGlobal.push(o);
             }
@@ -660,7 +652,7 @@ async function processarEnvioEmLote() {
     
     const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
     
-    let b=[], qN=0, qA=0;
+    let mapVendas = {}, qN = 0, qA = 0;
     for(let r of importDataGlobal) {
         if(!r[cDesc]) continue;
         let md=mG, ad=aG; if(cData&&r[cData]){const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;}}
@@ -670,9 +662,19 @@ async function processarEnvioEmLote() {
         let trep=cTot?to:rp, imp=rp*(impG/100), cst=(window.custosMapeadosLote[ds]||0)*q;
         if(canc){rp=0;imp=0;cst=0;}
         let sob=trep-imp, luc=sob-cst, mar=rp>0?luc/rp:0;
-        let exv=vendasGlobais.some(v=>v.nVenda===nv&&v.plataforma===pG); if(exv)qA++;else qN++;
-        b.push({ano:ad, mes:md, quantidade:q, descricao:ds, n_venda:nv, plataforma:pG, valor_venda:rp, sobra:sob, imposto:imp, custo:cst, lucro:luc, porcentagem:mar, sku:sk, status:st, estorno:es});
+        
+        let key = `${pG}_${nv}`;
+        let exv = vendasGlobais.some(v => v.nVenda === nv && v.plataforma === pG);
+        if(exv) qA++; else qN++;
+        
+        mapVendas[key] = {
+            ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: nv, plataforma: pG,
+            valor_venda: rp, sobra: sob, imposto: imp, custo: cst, lucro: luc,
+            porcentagem: mar, sku: sk, status: st, estorno: es
+        };
     }
+    
+    let b = Object.values(mapVendas);
     
     if(b.length>0) {
         try { 
