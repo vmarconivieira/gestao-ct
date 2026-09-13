@@ -13,7 +13,14 @@ let isDarkMode = false, isFetching = false;
 let paginaAtualVendas = 1, paginaAtualSkus = 1;
 const ITENS_POR_PAGINA = 50;
 let rawDataGlobal = [], importDataGlobal = [], importHeadersGlobal = [], produtosUnicosGlobal = [];
-let skusParaImportarGlobal = []; // Array temporário para a janela de Preview de SKUs
+let skusParaImportarGlobal = [];
+
+// FUNÇÃO MÁGICA QUE CORRIGE CARACTERES E ACENTOS
+function fixText(s) { 
+    if(!s || typeof s !== 'string') return s; 
+    try { return decodeURIComponent(escape(s)); } 
+    catch(e) { return s; } 
+}
 
 async function hashSHA256(str) {
     if (window.crypto && window.crypto.subtle) {
@@ -330,8 +337,8 @@ function importarCsvSkus(e) {
             
             if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados.");
             
-            const h = rawData[0].map(x=>String(x).trim().toUpperCase());
-            const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>String(x).includes("CUSTO"));
+            const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase());
+            const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO"));
             if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido. Faltam colunas SKU ou PRODUTO.");
             
             const mapSkus = {}; 
@@ -339,8 +346,8 @@ function importarCsvSkus(e) {
                 const row = rawData[i];
                 if(row.filter(c=>String(c).trim()!=="").length === 0) continue; 
                 
-                let prodName = iP>-1 ? String(row[iP]).trim() : '';
-                let skuCode = iS>-1 && String(row[iS]).trim() !== "" ? String(row[iS]).trim().toUpperCase() : prodName.toUpperCase();
+                let prodName = iP>-1 ? fixText(String(row[iP])).trim() : '';
+                let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase();
                 if(!skuCode) continue; 
                 
                 let valStr = iC>-1 ? row[iC] : 0;
@@ -358,7 +365,7 @@ function importarCsvSkus(e) {
                         let item = skusParaImportarGlobal[i];
                         tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50">
                             <td class="p-4 font-mono text-[10px] font-bold text-gray-500">${item.sku}</td>
-                            <td class="p-4 truncate max-w-[200px] font-semibold">${item.produto}</td>
+                            <td class="p-4 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${item.produto}">${item.produto}</td>
                             <td class="p-4 text-right font-extrabold text-red-500">${formatMoney(item.custo_atual)}</td>
                         </tr>`;
                     }
@@ -380,15 +387,9 @@ function importarCsvSkus(e) {
     const r = new FileReader();
     r.onload = function(ev) {
         let text = ev.target.result;
-        if(text.includes('')) {
-            const r2 = new FileReader();
-            r2.onload = e2 => processar(e2.target.result);
-            r2.readAsText(f, 'windows-1252');
-        } else {
-            processar(text);
-        }
+        processar(text);
     };
-    r.readAsText(f, 'UTF-8');
+    r.readAsArrayBuffer(f);
 }
 
 async function confirmarImportacaoSkus() {
@@ -460,32 +461,36 @@ async function deletarUsuario(id,u) { if(u===localStorage.getItem('app_auth_logi
 
 // Lote Import Vendas
 function iniciarImportacao(e) {
-    const f=e.target.files[0]; if(!f)return; 
+    const f=e.target.files[0]; if(!f)return; mostrarLoading("Analisando planilha...");
     
     const processar = (csvText) => {
         const w=XLSX.read(csvText,{type:'string'}); 
         const s=w.Sheets[w.SheetNames[0]]; 
         rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
-        if(rawDataGlobal.length===0) return showToast("Vazio","error");
+        if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Vazio","error"); }
         let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}}
-        importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?String(h).trim():`Vazia_${i}`); importDataGlobal=[];
-        for(let i=ml+1;i<rawDataGlobal.length;i++){let o={}, hd=false; rawDataGlobal[i].forEach((v,id)=>{o[importHeadersGlobal[id]]=v; if(String(v).trim()!=="")hd=true;}); if(hd)importDataGlobal.push(o);}
+        importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?fixText(String(h)).trim():`Vazia_${i}`); 
+        importDataGlobal=[];
+        for(let i=ml+1;i<rawDataGlobal.length;i++){
+            let o={}, hd=false; 
+            rawDataGlobal[i].forEach((v,id)=>{
+                let val = (typeof v === 'string') ? fixText(v) : v;
+                o[importHeadersGlobal[id]]=val; 
+                if(String(val).trim()!=="") hd=true;
+            }); 
+            if(hd)importDataGlobal.push(o);
+        }
         const dt=new Date(); const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto';
         construirInterfaceMapeamento(); const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); const fid = document.getElementById('fileImportData'); if(fid) fid.value="";
+        esconderLoading();
     };
 
     const r = new FileReader();
     r.onload = function(ev) {
         let text = ev.target.result;
-        if(text.includes('')) {
-            const r2 = new FileReader();
-            r2.onload = e2 => processar(e2.target.result);
-            r2.readAsText(f, 'windows-1252');
-        } else {
-            processar(text);
-        }
+        processar(text);
     };
-    r.readAsText(f, 'UTF-8');
+    r.readAsArrayBuffer(f);
 }
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
@@ -564,7 +569,7 @@ function renderPreviewImportacao() {
         tr.innerHTML = `
             <td class="p-3 text-xs font-bold text-gray-500">${md.substring(0,3)}/${ad}</td>
             <td class="p-3 font-mono text-[10px] font-bold text-gray-400">${sk || '-'}</td>
-            <td class="p-3 truncate max-w-[200px] font-semibold" title="${ds}">${ds}</td>
+            <td class="p-3 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${ds}">${ds}</td>
             <td class="p-3 text-center font-bold text-indigo-600">${q}</td>
             <td class="p-3 text-right text-blue-600 dark:text-blue-400 font-bold">${formatMoney(rp)}</td>
             <td class="p-3 text-right text-orange-500 font-semibold">${formatMoney(imp)}</td>
