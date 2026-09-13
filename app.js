@@ -15,28 +15,29 @@ const ITENS_POR_PAGINA = 50;
 let rawDataGlobal = [], importDataGlobal = [], importHeadersGlobal = [], produtosUnicosGlobal = [];
 let skusParaImportarGlobal = [];
 
+// FUNÇÃO MÁGICA QUE CORRIGE ACENTOS E CARACTERES ESPECIAIS
+function fixText(s) { 
+    if(!s || typeof s !== 'string') return s; 
+    try { return decodeURIComponent(escape(s)); } 
+    catch(e) { return s; } 
+}
+
 // MOTOR UNIVERSAL DE LEITURA (Excel, CSV ANSI e CSV UTF-8)
 function lerPlanilha(f, callback, errorCallback) {
     try {
-        if (f.name.toLowerCase().endsWith('.csv')) {
+        if (f.name.toLowerCase().endsWith('.csv') || f.name.toLowerCase().endsWith('.txt')) {
             const r = new FileReader();
             r.onload = function(ev) {
-                let text = ev.target.result;
-                if (text.includes('')) { 
-                    const r2 = new FileReader();
-                    r2.onload = e2 => { try { callback(XLSX.read(e2.target.result, {type: 'string'})); } catch(err) { errorCallback(err); } };
-                    r2.readAsText(f, 'windows-1252');
-                } else {
-                    try { callback(XLSX.read(text, {type: 'string'})); } catch(err) { errorCallback(err); }
-                }
+                try {
+                    callback(XLSX.read(ev.target.result, {type: 'string'}));
+                } catch(err) { errorCallback(err); }
             };
-            r.readAsText(f, 'UTF-8');
+            r.readAsText(f, 'windows-1252');
         } else {
             const r = new FileReader();
             r.onload = function(ev) {
                 try {
-                    const data = new Uint8Array(ev.target.result);
-                    callback(XLSX.read(data, {type: 'array'}));
+                    callback(XLSX.read(new Uint8Array(ev.target.result), {type: 'array'}));
                 } catch(err) { errorCallback(err); }
             };
             r.readAsArrayBuffer(f);
@@ -359,8 +360,8 @@ function importarCsvSkus(e) {
             
             if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados.");
             
-            const h = rawData[0].map(x=>String(x).trim().toUpperCase());
-            const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>String(x).includes("CUSTO"));
+            const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase());
+            const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO"));
             if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido. Faltam colunas SKU ou PRODUTO.");
             
             const mapSkus = {}; 
@@ -368,8 +369,8 @@ function importarCsvSkus(e) {
                 const row = rawData[i];
                 if(row.filter(c=>String(c).trim()!=="").length === 0) continue; 
                 
-                let prodName = iP>-1 ? String(row[iP]).trim() : '';
-                let skuCode = iS>-1 && String(row[iS]).trim() !== "" ? String(row[iS]).trim().toUpperCase() : prodName.toUpperCase();
+                let prodName = iP>-1 ? fixText(String(row[iP])).trim() : '';
+                let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase();
                 if(!skuCode) continue; 
                 
                 let valStr = iC>-1 ? row[iC] : 0;
@@ -484,36 +485,42 @@ function iniciarImportacao(e) {
     mostrarLoading("Analisando Vendas...");
     
     lerPlanilha(f, (w) => {
-        const s=w.Sheets[w.SheetNames[0]]; 
-        rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
-        if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Planilha vazia","error"); }
-        
-        let ml=0, mp=0; 
-        for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){
-            let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; 
-            if(p>mp){mp=p;ml=i;}
+        try {
+            const s=w.Sheets[w.SheetNames[0]]; 
+            rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
+            if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Planilha vazia","error"); }
+            
+            let ml=0, mp=0; 
+            for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){
+                let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; 
+                if(p>mp){mp=p;ml=i;}
+            }
+            
+            importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?fixText(String(h)).trim():`Vazia_${i}`); 
+            importDataGlobal=[];
+            for(let i=ml+1;i<rawDataGlobal.length;i++){
+                let o={}, hd=false; 
+                rawDataGlobal[i].forEach((v,id)=>{
+                    let val = (typeof v === 'string') ? fixText(v) : v;
+                    o[importHeadersGlobal[id]]=val; 
+                    if(String(val).trim()!=="") hd=true;
+                }); 
+                if(hd) importDataGlobal.push(o);
+            }
+            
+            const dt=new Date(); 
+            const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); 
+            const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; 
+            const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto';
+            
+            construirInterfaceMapeamento(); 
+            const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); 
+            const fid = document.getElementById('fileImportData'); if(fid) fid.value="";
+            esconderLoading();
+        } catch(err) {
+            esconderLoading();
+            showToast("Erro ao processar planilha: " + err.message, "error");
         }
-        
-        importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?String(h).trim():`Vazia_${i}`); 
-        importDataGlobal=[];
-        for(let i=ml+1;i<rawDataGlobal.length;i++){
-            let o={}, hd=false; 
-            rawDataGlobal[i].forEach((v,id)=>{
-                o[importHeadersGlobal[id]]=v; 
-                if(String(v).trim()!=="") hd=true;
-            }); 
-            if(hd) importDataGlobal.push(o);
-        }
-        
-        const dt=new Date(); 
-        const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); 
-        const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; 
-        const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto';
-        
-        construirInterfaceMapeamento(); 
-        const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); 
-        const fid = document.getElementById('fileImportData'); if(fid) fid.value="";
-        esconderLoading();
     }, (err) => {
         esconderLoading();
         showToast("Erro ao ler arquivo: " + err.message, "error");
