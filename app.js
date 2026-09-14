@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', ha);
                 if (data && data.length > 0) { const hn = await hashSHA256(sn); await db.from('usuarios').update({ senha: hn }).eq('usuario', u); localStorage.setItem('app_auth_token', hn); showToast("Senha alterada!", 'success'); fecharModalSenha(); }
                 else showToast("Senha atual incorreta.", 'error');
-            } catch (err) { showToast("Erro: " + err.message, "error"); } finally { esconderLoading(); }
+            } catch (err) { showToast("Erro.", "error"); } finally { esconderLoading(); }
         });
     }
 
@@ -224,7 +224,6 @@ async function buscarVendasServidor() {
         let q = db.from('vendas').select('*').order('created_at', { ascending: false });
         
         if (busca !== "") {
-            // Correção: Uso de '*' como coringa oficial do PostgREST para evitar erro de URI malformada com '%'
             q = q.or(`n_venda.ilike.*${busca}*,sku.ilike.*${busca}*,descricao.ilike.*${busca}*,status.ilike.*${busca}*`);
         } else {
             if (ano !== "TODOS") q = q.eq('ano', ano);
@@ -272,13 +271,13 @@ function renderPaginaVendas(p) {
         let display_nv = isAuto ? 'Lançamento' : (v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda);
         
         const l = v.urlPlataforma ? `<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${display_nv} ↗</a>` : display_nv;
-        const sLow = v.status.toLowerCase();
+        const sLow = String(v.status).toLowerCase();
         let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300');
         let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold");
         
         const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors";
         tr.innerHTML=`
-            <td class="p-4 text-xs text-gray-500">${v.mes.substring(0,3)}/${v.ano}</td>
+            <td class="p-4 text-xs text-gray-500">${String(v.mes).substring(0,3)}/${v.ano}</td>
             <td class="p-4 font-mono text-[10px] font-bold text-gray-400">${v.sku || '-'}</td>
             <td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao}</td>
             <td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td>
@@ -287,8 +286,8 @@ function renderPaginaVendas(p) {
             <td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td>
             <td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td>
             <td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td>
-            <td class="p-4 text-right font-extrabold ${luc >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td>
-            <td class="p-4 text-right ${corMargem}">${v.porcentagem.toFixed(2)}%</td>
+            <td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td>
+            <td class="p-4 text-right ${corMargem}">${(v.porcentagem || 0).toFixed(2)}%</td>
             <td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>
         `;
         if(tb) tb.appendChild(tr);
