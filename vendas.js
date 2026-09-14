@@ -1,7 +1,8 @@
-// Server-Side Fetching (Busca Dinâmica)
+// Server-Side Pagination: Busca apenas os filtros selecionados (economiza banda)
 async function buscarVendasServidor() {
     const fA = document.getElementById('filtroAno'); const fM = document.getElementById('filtroMes');
-    const ano = fA ? fA.value : "TODOS"; const mes = fM ? fM.value : "TODOS";
+    const ano = fA ? fA.value : new Date().getFullYear().toString(); 
+    const mes = fM ? fM.value : ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][new Date().getMonth()];
     
     mostrarLoading("Buscando dados...");
     try {
@@ -14,11 +15,7 @@ async function buscarVendasServidor() {
         
         vendasGlobais = (data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes).toUpperCase(), qtd: v.quantidade, descricao: v.descricao, sku: v.sku, nVenda: v.n_venda, urlPlataforma: v.url_ml, plataforma: v.plataforma, valorVenda: Number(v.valor_venda), sobra: Number(v.sobra), imposto: Number(v.imposto), custo: Number(v.custo), lucro: Number(v.lucro), porcentagem: Number(v.porcentagem)*100, status: v.status }));
         aplicarFiltrosLocais();
-    } catch (e) {
-        showToast("Erro ao buscar vendas: " + e.message, "error");
-    } finally {
-        esconderLoading();
-    }
+    } catch (e) { showToast("Erro ao buscar vendas.", "error"); } finally { esconderLoading(); }
 }
 
 async function carregarDadosIniciais() {
@@ -30,20 +27,14 @@ async function carregarDadosIniciais() {
         await buscarVendasServidor();
         const ind = document.getElementById('statusConexao'), txt = document.getElementById('textoConexao');
         if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText = `Online`; 
-    } catch (e) { 
-        showToast("Falha na sincronização", "error");
-    } finally {
-        esconderLoading();
-    }
+    } catch (e) { showToast("Falha na sincronização", "error"); } finally { esconderLoading(); }
 }
 
 function aplicarFiltrosLocais() {
     const fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas');
     const o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : "";
-    
     vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b));
     if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro);
-    
     atualizarCardsPainel(vendasFiltradasGlobal); atualizarGrafico(vendasFiltradasGlobal); carregarFiltroAnalise(); paginaAtualVendas=1; renderPaginaVendas(1);
 }
 
@@ -54,7 +45,7 @@ function renderPaginaVendas(p) {
     const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA);
     if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="11" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
     i.forEach(v => {
-        let original_nv = v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda; // Remove o sufixo -I do banco para exibir limpo
+        let original_nv = v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda; 
         const l=v.urlPlataforma?`<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${original_nv} ↗</a>`:original_nv;
         const sLow = v.status.toLowerCase();
         let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300');
@@ -70,15 +61,18 @@ function renderPaginaVendas(p) {
     const btnN = document.getElementById('btnNextVendas'); if(btnN) btnN.disabled=paginaAtualVendas===tp;
 }
 
-const vendaF = document.getElementById('vendaForm');
-if(vendaF) {
-    vendaF.addEventListener('submit', async function(e) {
-        e.preventDefault(); mostrarLoading("Salvando...");
-        const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value;
-        const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${nv}`:'');
-        const t=q*v, s=t-(q*i), lu=s-(q*c);
-        const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
-        try { const { error } = await db.from('vendas').upsert(p, {onConflict:'plataforma,n_venda'}); if(error) throw error; limparRascunho(); await buscarVendasServidor(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(e){showToast("Erro", "error");} finally {esconderLoading();}
-    });
-}
+document.addEventListener('DOMContentLoaded', () => {
+    const vendaF = document.getElementById('vendaForm');
+    if(vendaF) {
+        vendaF.addEventListener('submit', async function(e) {
+            e.preventDefault(); mostrarLoading("Salvando...");
+            const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value;
+            const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${nv}`:'');
+            const t=q*v, s=t-(q*i), lu=s-(q*c);
+            const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
+            try { const { error } = await db.from('vendas').upsert(p, {onConflict:'plataforma,n_venda'}); if(error) throw error; limparRascunho(); await buscarVendasServidor(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(e){showToast("Erro", "error");} finally {esconderLoading();}
+        });
+    }
+});
+
 async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN')return; if(!confirm("Apagar?"))return; mostrarLoading("Apagando..."); try { await db.from('vendas').delete().eq('id',id); await buscarVendasServidor(); showToast("Excluído!","success"); } catch(e){} finally{esconderLoading();} }
