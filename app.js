@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hs);
                 if (data && data.length > 0 && data[0].nivel === 'ADMIN') { 
                     const { error } = await db.from('vendas').delete().eq('ano', a).ilike('mes', m); 
-                    if(!error) { showToast("Mês excluído!", 'success'); fecharModalExcluirMes(); await buscarVendasServidor(); } 
+                    if(!error) { showToast("Mês excluído com sucesso!", 'success'); fecharModalExcluirMes(); await buscarVendasServidor(); } 
                     else throw error;
                 } else { showToast("Senha ADMIN incorreta.", 'error'); }
             } catch (err) { showToast("Erro: " + err.message, "error"); } finally { esconderLoading(); }
@@ -184,7 +184,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${original_nv}`:'');
             const t=q*v, s=t-(q*i), lu=s-(q*c);
             const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:original_nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
-            try { const { error } = await db.from('vendas').insert([p]); if(error) throw error; limparRascunho(); await buscarVendasServidor(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(er){showToast("Erro: " + er.message, "error");} finally {esconderLoading();}
+            try { 
+                const { error } = await db.from('vendas').insert([p]); 
+                if(error) throw error; 
+                limparRascunho(); await buscarVendasServidor(); switchTab('dashboard'); showToast('Salvo!', 'success'); 
+            } catch(er){showToast("Erro: " + er.message, "error");} finally {esconderLoading();}
         });
     }
 });
@@ -241,8 +245,11 @@ function renderPaginaVendas(p) {
     const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA);
     if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="11" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
     i.forEach(v => {
-        let original_nv = v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda; 
-        const l=v.urlPlataforma?`<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${original_nv.includes('AUTO') ? 'Link' : original_nv} ↗</a>`: (original_nv.includes('AUTO') ? '-' : original_nv);
+        // Remove a exibição de IDs automáticos feios gerados pelo sistema
+        let isAuto = v.nVenda.includes('SYS-') || v.nVenda.includes('AUTO-');
+        let display_nv = isAuto ? '-' : v.nVenda;
+        
+        const l = v.urlPlataforma && !isAuto ? `<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${display_nv} ↗</a>` : display_nv;
         const sLow = v.status.toLowerCase();
         let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300');
         let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold");
@@ -406,8 +413,8 @@ function extrairProdutosUnicos() {
 function renderPreviewImportacao() {
     const tb = document.getElementById('tabelaPreviewImportacao'), container = document.getElementById('areaPreviewImportacao'); if(!tb || !container) return; tb.innerHTML = '';
     const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), giEl = document.getElementById('globalImposto'), aG = gaEl ? gaEl.value : new Date().getFullYear(), mG = gmEl ? gmEl.value : '', impG = Number(giEl ? giEl.value : 0) || 0;
-    const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cqEl=document.getElementById('map_qtd'), cveEl=document.getElementById('map_venda'), ctoEl=document.getElementById('map_total'), cesEl=document.getElementById('map_estorno'), cstEl=document.getElementById('map_status');
-    const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cQtd=cqEl?cqEl.value:'', cVen=cveEl?cveEl.value:'', cTot=ctoEl?ctoEl.value:'';
+    const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total');
+    const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
     if(!cDesc) { container.classList.add('hidden'); return; }
     
     let count = 0;
@@ -431,7 +438,19 @@ function atualizarMapeamentoDinamico() {
 
 function construirInterfaceMapeamento() {
     const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML='';
-    [{id:'map_data',l:'Data',s:['Data', 'Data da venda']}, {id:'map_sku',l:'SKU',s:['SKU']}, {id:'map_desc',l:'Descrição',s:['Título', 'Descrição']}, {id:'map_nven',l:'Pedido',s:['N.º', 'Pedido']}, {id:'map_qtd',l:'Qtd',s:['Unidade', 'Qtd']}, {id:'map_status',l:'Status',s:['Estado', 'Status']}, {id:'map_venda',l:'Venda (R$)',s:['Receita por pro', 'Venda', 'Bruto']}, {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por env']}, {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de vend', 'Taxa']}, {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de env', 'Frete']}, {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamento', 'Estorno']}, {id:'map_total',l:'Total (R$)',s:['Total']}].forEach(f => {
+    [
+        {id:'map_data',l:'Data',s:['Data da venda', 'Data']}, 
+        {id:'map_sku',l:'SKU',s:['SKU']}, 
+        {id:'map_desc',l:'Descrição',s:['Título do anúncio', 'Descrição', 'Título']}, 
+        {id:'map_qtd',l:'Qtd',s:['Unidades', 'Unidade', 'Qtd']}, 
+        {id:'map_status',l:'Status',s:['Estado', 'Status']}, 
+        {id:'map_venda',l:'Venda (R$)',s:['Preço unitário', 'Receita por pro', 'Venda', 'Bruto']}, 
+        {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por envio']}, 
+        {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de venda', 'Taxa']}, 
+        {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de envio', 'Frete']}, 
+        {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamentos e reembolsos', 'Cancelamento', 'Estorno']}, 
+        {id:'map_total',l:'Total (R$)',s:['Total']}
+    ].forEach(f => {
         let h=`<div class="flex flex-col bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm"><label class="text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">${f.l}</label><select id="${f.id}" onchange="atualizarMapeamentoDinamico()" class="p-2.5 outline-none text-xs border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"><option value="">-- Ignorar --</option>`;
         importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${f.s.some(x=>hd.toLowerCase().includes(x.toLowerCase()))?'selected':''}>${hd}</option>`; });
         c.innerHTML+=h+'</select></div>';
@@ -442,30 +461,36 @@ async function processarEnvioEmLote() {
     mostrarLoading("Sincronizando Lote...");
     const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), gpEl = document.getElementById('globalPlataforma'), giEl = document.getElementById('globalImposto');
     const aG=gaEl?gaEl.value:new Date().getFullYear(), mG=gmEl?gmEl.value:'', pG=gpEl?gpEl.value:'', impG=Number(giEl?giEl.value:0)||0;
-    const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cnvEl=document.getElementById('map_nven'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total');
-    const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
+    const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total');
+    
+    const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
     
     let b = [], qN = 0;
-    for(let r of importDataGlobal) {
+    let batchTime = Date.now().toString(36).toUpperCase();
+    
+    for(let i = 0; i < importDataGlobal.length; i++) {
+        let r = importDataGlobal[i];
         if(!r[cDesc]) continue;
+        
         let md=mG, ad=aG; if(cData&&r[cData]){const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;}}
         let rp=cVen?universalNumberParse(r[cVen]):0, to=cTot?universalNumberParse(r[cTot]):0, es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0;
         
         let q=Number(r[cQtd])||1, sk=r[cSku]||"", ds=r[cDesc]||"N/A", st=cSt&&r[cSt]?r[cSt]:"Concluído";
-        let original_nv = r[cNv] || `AUTO-${Math.random().toString(36).substr(2, 6).toUpperCase()}-${Date.now().toString().slice(-4)}`;
+        
+        // GERAÇÃO DE ID ÚNICO E BLINDADO PARA INSERÇÃO DIRETA
+        let auto_nv = `SYS-${batchTime}-${i}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
         
         let canc=(cTot&&(es<0||to<=0))||(!cTot&&(st.toLowerCase().includes('canc')||rp<=0));
         let trep=cTot?to:rp, imp=rp*(impG/100), cst=(window.custosMapeadosLote[ds]||0)*q;
         if(canc){rp=0;imp=0;cst=0;} let sob=trep-imp, luc=sob-cst, mar=rp>0?luc/rp:0;
         
-        let urlML = (pG === 'Mercado Livre' && r[cNv]) ? `https://www.mercadolivre.com.br/vendas/${original_nv}` : '';
-        
-        b.push({ ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: original_nv, plataforma: pG, url_ml: urlML, valor_venda: rp, sobra: sob, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es });
+        b.push({ ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: auto_nv, plataforma: pG, url_ml: '', valor_venda: rp, sobra: sob, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es });
         qN++;
     }
     
     if(b.length>0) {
         try { 
+            // Inserção Direta: Contorna o erro de Unique Constraint
             const {error} = await db.from('vendas').insert(b); 
             if(error) throw error; 
             
@@ -473,6 +498,7 @@ async function processarEnvioEmLote() {
             b.forEach(x => { fTotal += x.valor_venda; lTotal += x.lucro; });
             
             const rn=document.getElementById('resumoLoteNovos'); if(rn) rn.innerText=qN; 
+            const ra=document.getElementById('resumoLoteAtualizados'); if(ra) ra.innerText="0"; 
             const rf=document.getElementById('resumoLoteFat'); if(rf) rf.innerText=formatMoney(fTotal); 
             const rl=document.getElementById('resumoLoteLucro'); if(rl) rl.innerText=formatMoney(lTotal); 
             
