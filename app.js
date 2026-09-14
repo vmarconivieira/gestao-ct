@@ -15,6 +15,8 @@ const ITENS_POR_PAGINA = 50;
 let rawDataGlobal = [], importDataGlobal = [], importHeadersGlobal = [], produtosUnicosGlobal = [];
 let skusParaImportarGlobal = [];
 
+let debounceBuscaTimer = null; // Temporizador da Busca Dinâmica
+
 // ==========================================
 // FUNÇÕES GLOBAIS E FERRAMENTAS
 // ==========================================
@@ -200,19 +202,39 @@ function abrirModalExcluirMes() { const m = document.getElementById('modalExclui
 function fecharModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.add('hidden'); }
 
 // ==========================================
-// BUSCA E RENDERIZAÇÃO (PAGINAÇÃO SERVER)
+// BUSCA DINÂMICA E RENDERIZAÇÃO (SERVER-SIDE)
 // ==========================================
+function acionarBuscaDinamica() {
+    clearTimeout(debounceBuscaTimer);
+    debounceBuscaTimer = setTimeout(() => {
+        buscarVendasServidor();
+    }, 600); // Aguarda 600ms após o usuário parar de digitar
+}
+
 async function buscarVendasServidor() {
     const fA = document.getElementById('filtroAno'); const fM = document.getElementById('filtroMes');
+    const fB = document.getElementById('buscaVendas');
+    
     const ano = fA ? fA.value : new Date().getFullYear().toString(); 
     const mes = fM ? fM.value : ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][new Date().getMonth()];
+    const busca = fB ? fB.value.trim() : "";
+
     mostrarLoading("Buscando dados...");
     try {
         let q = db.from('vendas').select('*').order('created_at', { ascending: false });
-        if (ano !== "TODOS") q = q.eq('ano', ano);
-        if (mes !== "TODOS") q = q.ilike('mes', mes);
+        
+        if (busca !== "") {
+            // Busca Global: Se tem texto, varre o banco inteiro ignorando a data
+            q = q.or(`n_venda.ilike.%${busca}%,sku.ilike.%${busca}%,descricao.ilike.%${busca}%`);
+        } else {
+            // Busca Local: Respeita o mês e ano do filtro
+            if (ano !== "TODOS") q = q.eq('ano', ano);
+            if (mes !== "TODOS") q = q.ilike('mes', mes);
+        }
+        
         const { data, error } = await q;
         if (error) throw error;
+        
         vendasGlobais = (data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes).toUpperCase(), qtd: v.quantidade, descricao: v.descricao, sku: v.sku, nVenda: v.n_venda, urlPlataforma: v.url_ml, plataforma: v.plataforma, valorVenda: Number(v.valor_venda), sobra: Number(v.sobra), imposto: Number(v.imposto), custo: Number(v.custo), lucro: Number(v.lucro), porcentagem: Number(v.porcentagem)*100, status: v.status }));
         aplicarFiltrosLocais();
     } catch (e) { showToast("Erro ao buscar vendas.", "error"); } finally { esconderLoading(); }
@@ -253,7 +275,7 @@ function renderPaginaVendas(p) {
         let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300');
         let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold");
         const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors";
-        tr.innerHTML=`<td class="p-4 text-xs text-gray-500">${v.mes.substring(0,3)}/${v.ano}</td><td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao} ${v.sku ? `<div class="text-[10px] text-gray-500 font-mono font-normal mt-0.5">${v.sku}</div>` : ''}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td><td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td><td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td><td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td><td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td><td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td><td class="p-4 text-right ${corMargem}">${v.porcentagem.toFixed(2)}%</td><td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`;
+        tr.innerHTML=`<td class="p-4 text-xs text-gray-500">${v.mes.substring(0,3)}/${v.ano}</td><td class="p-4 font-mono text-[10px] font-bold text-gray-400">${v.sku || '-'}</td><td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td><td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td><td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td><td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td><td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td><td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td><td class="p-4 text-right ${corMargem}">${v.porcentagem.toFixed(2)}%</td><td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`;
         if(tb) tb.appendChild(tr);
     });
     const lblP = document.getElementById('lblPaginaVendas'); if(lblP) lblP.innerText=paginaAtualVendas; 
@@ -389,7 +411,7 @@ function iniciarImportacao(e) {
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
 
-// O TRACTOR DE DATAS TURBINADO E BLINDADO
+// O TRACTOR DE DATAS TURBINADO
 function extrairMesAnoDaData(d) { 
     if(!d) return null; 
     let str = String(d).toLowerCase().replace(/\s+/g, ' ').trim(); 
@@ -397,41 +419,34 @@ function extrairMesAnoDaData(d) {
     const mapMes = {"janeiro":"JANEIRO","fevereiro":"FEVEREIRO","março":"MARÇO","abril":"ABRIL","maio":"MAIO","junho":"JUNHO","julho":"JULHO","agosto":"AGOSTO","setembro":"SETEMBRO","outubro":"OUTUBRO","novembro":"NOVEMBRO","dezembro":"DEZEMBRO", "jan":"JANEIRO", "fev":"FEVEREIRO", "mar":"MARÇO", "abr":"ABRIL", "mai":"MAIO", "jun":"JUNHO", "jul":"JULHO", "ago":"AGOSTO", "set":"SETEMBRO", "out":"OUTUBRO", "nov":"NOVEMBRO", "dez":"DEZEMBRO"};
     const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
 
-    // Scanner Regex Agressivo (Lida com '12 de setembro de 2026 21:12 hs.')
     let mlRegex = /(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i;
     let mlMatch = str.match(mlRegex);
     if(mlMatch) { return { mes: mapMes[mlMatch[1].toLowerCase()], ano: parseInt(mlMatch[2]) }; }
 
-    // Formato BR (DD/MM/YYYY ou DD/MM/YY)
     let regBr = str.match(/(\d{2})\/(\d{2})\/(\d{2,4})/); 
     if(regBr && regBr[1].length === 2 && regBr[2].length === 2) { 
         let y = parseInt(regBr[3]); if (y < 100) y += 2000;
         let mIndex = parseInt(regBr[2]) - 1; if (mIndex >= 0 && mIndex <= 11) return { mes: mArr[mIndex], ano: y }; 
     }
     
-    // Formato Internacional (YYYY-MM-DD)
     let regInt = str.match(/(\d{4})-(\d{2})-(\d{2})/); 
     if(regInt) { 
         let mIndex = parseInt(regInt[2]) - 1; if (mIndex >= 0 && mIndex <= 11) return { mes: mArr[mIndex], ano: parseInt(regInt[1]) }; 
     }
 
-    // Formato ML Antigo ("31 de agosto de 2026")
     let p = str.split(' de '); 
     if(p.length >= 3) { 
         let mesStr = p[1].trim(); let m = mapMes[mesStr]; let yearStr = p[2].trim().substring(0,4);
         if(m && !isNaN(yearStr)) return { mes: m, ano: parseInt(yearStr) }; 
     }
 
-    // Scanner de Força Bruta
     for (let key in mapMes) { if (str.includes(key)) { let yearMatch = str.match(/\d{4}/); if (yearMatch) return { mes: mapMes[key], ano: parseInt(yearMatch[0]) }; } }
     
-    // Formato Excel Puro Numérico
     if (!isNaN(str) && Number(str) > 20000 && Number(str) < 99999) {
         let date = new Date(Math.round((Number(str) - 25569) * 86400 * 1000));
         return { mes: mArr[date.getUTCMonth()], ano: date.getUTCFullYear() };
     }
 
-    // Fallback Javascript
     let dObj = new Date(str);
     if(!isNaN(dObj.getTime()) && str.length > 6) return { mes: mArr[dObj.getMonth()], ano: dObj.getFullYear() };
     
@@ -495,7 +510,6 @@ function atualizarMapeamentoDinamico() {
 
 function construirInterfaceMapeamento() {
     const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML='';
-    // Mapeamento Estrito: Prioriza Correspondência Exata
     [
         {id:'map_data',l:'Data',s:['Data da venda', 'Data']}, 
         {id:'map_sku',l:'SKU',s:['SKU']}, 
@@ -541,7 +555,6 @@ async function processarEnvioEmLote() {
     let novosSkusParaSalvar = [];
     let skuTrackSet = new Set();
     
-    // Captura o estado do Toggle de Salvar SKUs (Se não existir, assume false)
     const tglSku = document.getElementById('toggleSalvarSkus');
     const allowSaveSkus = tglSku ? tglSku.checked : false;
     
@@ -589,7 +602,9 @@ async function processarEnvioEmLote() {
         let exv = vendasGlobais.some(v => v.nVenda === nv_banco && v.plataforma === pG);
         let key = `${pG}_${nv_banco}`;
         
-        if (!mapVendas[key]) { if(exv) qA++; else qN++; }
+        if (!mapVendas[key]) {
+            if(exv) qA++; else qN++;
+        }
         
         mapVendas[key] = { ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: nv_banco, plataforma: pG, url_ml: urlML, valor_venda: rp, sobra: sob, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es };
     }
