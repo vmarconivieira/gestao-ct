@@ -179,7 +179,6 @@ document.addEventListener('DOMContentLoaded', () => {
             let original_nv = nv || `MANUAL-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
             const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${original_nv}/detalhe`:'');
             
-            // Aqui mantemos a lógica manual onde taxa unitária é um valor fixo, apenas pro formulário rápido
             const t=q*v, s=t-(q*i), lu=s-(q*c);
             const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:original_nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
             try { 
@@ -690,6 +689,40 @@ async function confirmarImportacaoSkus() {
     const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.add('hidden'); mostrarLoading("Sincronizando no Supabase...");
     try { const { error } = await db.from('custos_sku').upsert(skusParaImportarGlobal, {onConflict:'sku'}); if(error) throw new Error(error.message); await carregarDadosIniciais(); showToast(skusParaImportarGlobal.length + " SKUs importados com sucesso!", "success"); skusParaImportarGlobal = []; } 
     catch(e) { showToast(e.message, "error"); } finally { esconderLoading(); }
+}
+
+function renderPaginaSkus(p) {
+    const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; 
+    skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b));
+    const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML='';
+    skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => {
+        let isActive = String(s.STATUS).trim().toUpperCase() !== "INATIVO";
+        let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400";
+        const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors";
+        tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; 
+        if(tb) tb.appendChild(tr);
+    });
+    const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; 
+    const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp;
+    const btnP = document.getElementById('btnPrevSkus'); if(btnP) btnP.disabled=paginaAtualSkus===1; 
+    const btnN = document.getElementById('btnNextSkus'); if(btnN) btnN.disabled=paginaAtualSkus===tp;
+}
+
+function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
+
+function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
+
+async function deletarSku(skuCode) { 
+    if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; 
+    if(!confirm(`Tem certeza que deseja apagar o produto SKU: ${skuCode}?`)) return; 
+    mostrarLoading("Apagando SKU..."); 
+    try { await db.from('custos_sku').delete().eq('sku', skuCode); await carregarDadosIniciais(); showToast("SKU Excluído!","success"); } 
+    catch(e) { showToast("Erro ao excluir", "error"); } finally { esconderLoading(); } 
+}
+
+const formSku = document.getElementById('formCadastroSku');
+if(formSku) {
+    formSku.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await db.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value, produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, custo_medio:document.getElementById('skuForm_custoMedio').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosIniciais(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} });
 }
 
 function renderTabelaUsuarios() {
