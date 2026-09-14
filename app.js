@@ -179,11 +179,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if(vendaF) {
         vendaF.addEventListener('submit', async function(e) {
             e.preventDefault(); mostrarLoading("Salvando...");
-            const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value;
-            let original_nv = nv || `AUTO-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-            const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${original_nv}`:'');
+            const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value;
+            // Gera um ID Automático (como a coluna pedido foi removida, lançamentos manuais não usarão número fixo para não travar)
+            const auto_nv = `MANUAL-${Math.random().toString(36).substr(2, 6).toUpperCase()}-${Date.now().toString().slice(-4)}`;
+            
+            const l=document.getElementById('urlPlataforma').value || '';
             const t=q*v, s=t-(q*i), lu=s-(q*c);
-            const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:original_nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
+            const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:auto_nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
             try { 
                 const { error } = await db.from('vendas').insert([p]); 
                 if(error) throw error; 
@@ -245,9 +247,8 @@ function renderPaginaVendas(p) {
     const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA);
     if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="11" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
     i.forEach(v => {
-        // Remove a exibição de IDs automáticos feios gerados pelo sistema
-        let isAuto = v.nVenda.includes('SYS-') || v.nVenda.includes('AUTO-');
-        let display_nv = isAuto ? '-' : v.nVenda;
+        let isAuto = v.nVenda.includes('SYS-') || v.nVenda.includes('AUTO-') || v.nVenda.includes('MANUAL-');
+        let display_nv = isAuto ? 'Lançamento' : v.nVenda;
         
         const l = v.urlPlataforma && !isAuto ? `<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${display_nv} ↗</a>` : display_nv;
         const sLow = v.status.toLowerCase();
@@ -355,7 +356,7 @@ function calcularSimuladores() {
 function limparSimulador() { ['calcVenda','calcCusto','calcImposto','calcComissao','calcFrete','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
 
 // ==========================================
-// MOTOR DE IMPORTAÇÃO (LOTE E SKUS)
+// MOTOR DE IMPORTAÇÃO DE LOTE
 // ==========================================
 function iniciarImportacao(e) {
     const f=e.target.files[0]; if(!f) return; mostrarLoading("Analisando Vendas...");
@@ -390,11 +391,48 @@ function iniciarImportacao(e) {
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
 
+// O TRACTOR DE DATAS
 function extrairMesAnoDaData(d) { 
-    if(!d) return null; let str = String(d).toLowerCase().trim(); let p = str.split(' de '); 
-    if(p.length >= 3) { const mapMes = {"janeiro":"JANEIRO","fevereiro":"FEVEREIRO","março":"MARÇO","abril":"ABRIL","maio":"MAIO","junho":"JUNHO","julho":"JULHO","agosto":"AGOSTO","setembro":"SETEMBRO","outubro":"OUTUBRO","novembro":"NOVEMBRO","dezembro":"DEZEMBRO"}; return { mes: mapMes[p[1].trim()] || p[1].trim().toUpperCase(), ano: parseInt(p[2].trim().substring(0,4)) }; }
-    let regBr = str.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(regBr) { const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]; return { mes: mArr[parseInt(regBr[2])-1], ano: parseInt(regBr[3]) }; }
-    let regInt = str.match(/(\d{4})-(\d{2})-(\d{2})/); if(regInt) { const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]; return { mes: mArr[parseInt(regInt[2])-1], ano: parseInt(regInt[1]) }; }
+    if(!d) return null; 
+    let str = String(d).toLowerCase().replace(/\s+/g, ' ').trim(); // Limpeza radical de espaços
+    
+    // 1. Formato Mercado Livre ("31 de agosto de 2026")
+    let p = str.split(' de '); 
+    if(p.length >= 3) { 
+        const mapMes = {"janeiro":"JANEIRO","fevereiro":"FEVEREIRO","março":"MARÇO","abril":"ABRIL","maio":"MAIO","junho":"JUNHO","julho":"JULHO","agosto":"AGOSTO","setembro":"SETEMBRO","outubro":"OUTUBRO","novembro":"NOVEMBRO","dezembro":"DEZEMBRO"}; 
+        let mesStr = p[1].trim(); 
+        let m = mapMes[mesStr] || mesStr.toUpperCase(); 
+        return { mes: m, ano: parseInt(p[2].trim().substring(0,4)) }; 
+    }
+    
+    // 2. Formato BR (DD/MM/YYYY)
+    let regBr = str.match(/(\d{2})\/(\d{2})\/(\d{4})/); 
+    if(regBr) { 
+        const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]; 
+        return { mes: mArr[parseInt(regBr[2])-1], ano: parseInt(regBr[3]) }; 
+    }
+    
+    // 3. Formato Internacional (YYYY-MM-DD)
+    let regInt = str.match(/(\d{4})-(\d{2})-(\d{2})/); 
+    if(regInt) { 
+        const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]; 
+        return { mes: mArr[parseInt(regInt[2])-1], ano: parseInt(regInt[1]) }; 
+    }
+    
+    // 4. Formato Excel Numérico (Ex: 45535)
+    if (!isNaN(str) && Number(str) > 20000 && Number(str) < 99999) {
+        let date = new Date(Math.round((Number(str) - 25569) * 86400 * 1000));
+        const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
+        return { mes: mArr[date.getUTCMonth()], ano: date.getUTCFullYear() };
+    }
+
+    // 5. Fallback Javascript Padrão
+    let dObj = new Date(str);
+    if(!isNaN(dObj.getTime()) && str.length > 10) {
+        const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
+        return { mes: mArr[dObj.getMonth()], ano: dObj.getFullYear() };
+    }
+    
     return null; 
 }
 
@@ -414,6 +452,8 @@ function renderPreviewImportacao() {
     const tb = document.getElementById('tabelaPreviewImportacao'), container = document.getElementById('areaPreviewImportacao'); if(!tb || !container) return; tb.innerHTML = '';
     const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), giEl = document.getElementById('globalImposto'), aG = gaEl ? gaEl.value : new Date().getFullYear(), mG = gmEl ? gmEl.value : '', impG = Number(giEl ? giEl.value : 0) || 0;
     const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total');
+    
+    // Removido cNvEl daqui
     const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
     if(!cDesc) { container.classList.add('hidden'); return; }
     
@@ -438,6 +478,7 @@ function atualizarMapeamentoDinamico() {
 
 function construirInterfaceMapeamento() {
     const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML='';
+    // Pedido (map_nven) completamente extinto desta lista!
     [
         {id:'map_data',l:'Data',s:['Data da venda', 'Data']}, 
         {id:'map_sku',l:'SKU',s:['SKU']}, 
@@ -461,8 +502,9 @@ async function processarEnvioEmLote() {
     mostrarLoading("Sincronizando Lote...");
     const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), gpEl = document.getElementById('globalPlataforma'), giEl = document.getElementById('globalImposto');
     const aG=gaEl?gaEl.value:new Date().getFullYear(), mG=gmEl?gmEl.value:'', pG=gpEl?gpEl.value:'', impG=Number(giEl?giEl.value:0)||0;
-    const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total');
     
+    // cNv removido
+    const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total');
     const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
     
     let b = [], qN = 0;
@@ -472,12 +514,16 @@ async function processarEnvioEmLote() {
         let r = importDataGlobal[i];
         if(!r[cDesc]) continue;
         
-        let md=mG, ad=aG; if(cData&&r[cData]){const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;}}
-        let rp=cVen?universalNumberParse(r[cVen]):0, to=cTot?universalNumberParse(r[cTot]):0, es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0;
+        let md=mG, ad=aG; 
+        if(cData && r[cData]){
+            const ex=extrairMesAnoDaData(r[cData]); 
+            if(ex){md=ex.mes;ad=ex.ano;}
+        }
         
+        let rp=cVen?universalNumberParse(r[cVen]):0, to=cTot?universalNumberParse(r[cTot]):0, es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0;
         let q=Number(r[cQtd])||1, sk=r[cSku]||"", ds=r[cDesc]||"N/A", st=cSt&&r[cSt]?r[cSt]:"Concluído";
         
-        // GERAÇÃO DE ID ÚNICO E BLINDADO PARA INSERÇÃO DIRETA
+        // GERAÇÃO DE ID ÚNICO E BLINDADO (O Supabase vai aceitar tudo sem reclamar de conflito)
         let auto_nv = `SYS-${batchTime}-${i}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
         
         let canc=(cTot&&(es<0||to<=0))||(!cTot&&(st.toLowerCase().includes('canc')||rp<=0));
@@ -490,7 +536,7 @@ async function processarEnvioEmLote() {
     
     if(b.length>0) {
         try { 
-            // Inserção Direta: Contorna o erro de Unique Constraint
+            // Inserção Direta - Zero dor de cabeça com Unique Keys do Supabase
             const {error} = await db.from('vendas').insert(b); 
             if(error) throw error; 
             
