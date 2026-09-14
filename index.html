@@ -127,6 +127,38 @@
         </div>
     </div>
 
+    <!-- MODAL NOVA TAREFA KANBAN -->
+    <div id="modalKanban" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-lg border border-purple-100 dark:border-gray-700 animate-fade-in">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-xl font-bold dark:text-white flex items-center"><span class="mr-2">📋</span> Nova Tarefa</h3>
+                <button onclick="fecharModalKanban()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button>
+            </div>
+            <form id="formKanban" class="flex flex-col gap-4">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Título</label>
+                    <input type="text" id="kanban_titulo" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-colors shadow-sm font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Descrição / Links</label>
+                    <textarea id="kanban_descricao" rows="4" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-colors shadow-sm custom-scrollbar"></textarea>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Prioridade</label>
+                    <select id="kanban_prioridade" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-colors shadow-sm font-bold">
+                        <option value="Baixa">🟢 Baixa</option>
+                        <option value="Média" selected>🟡 Média</option>
+                        <option value="Alta">🔴 Alta</option>
+                    </select>
+                </div>
+                <div class="flex gap-3 mt-4">
+                    <button type="button" onclick="fecharModalKanban()" class="w-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold py-3.5 rounded-xl shadow transition-colors">Cancelar</button>
+                    <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Criar Tarefa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAIS DE SENHA E EXCLUSÃO -->
     <div id="modalSenha" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-gray-100 dark:border-gray-700">
@@ -250,6 +282,7 @@
         <div class="flex justify-center animate-fade-in">
             <div class="glass-panel p-2 rounded-3xl inline-flex shadow-sm gap-2 flex-wrap justify-center">
                 <button onclick="switchTab('dashboard')" id="btn-tab-dashboard" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float">📊 Dashboard</button>
+                <button onclick="switchTab('kanban')" id="btn-tab-kanban" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📋 Kanban</button>
                 <button onclick="switchTab('analise')" id="btn-tab-analise" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📈 Inteligência</button>
                 <button onclick="switchTab('novo')" id="btn-tab-novo" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">✨ Novo Lançamento</button>
                 <button onclick="switchTab('calculadora')" id="btn-tab-calculadora" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">🧮 Calculadora</button>
@@ -257,7 +290,8 @@
                 <button onclick="switchTab('usuarios')" id="btn-tab-usuarios" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">👥 Equipe</button>
             </div>
         </div>
-		<!-- ABA 1: DASHBOARD -->
+
+        <!-- ABA 1: DASHBOARD -->
         <div id="tab-dashboard" class="space-y-6 animate-fade-in">
             <div class="flex justify-end gap-2 mb-2">
                 <button onclick="toggleGrafico()" class="bg-indigo-100 text-indigo-700 font-bold py-2 px-4 rounded-full text-sm">📉 Gráfico</button>
@@ -286,7 +320,7 @@
             </div>
             
             <section class="glass-panel p-5 sm:p-6 rounded-3xl">
-				<div class="flex flex-col xl:flex-row justify-between mb-4 gap-3 items-start xl:items-center">
+                <div class="flex flex-col xl:flex-row justify-between mb-4 gap-3 items-start xl:items-center">
                     <h2 class="text-xl font-extrabold dark:text-white shrink-0">📚 Histórico</h2>
                     <div class="flex flex-wrap items-center gap-2 w-full xl:w-auto">
                         <input type="text" id="buscaVendas" oninput="acionarBuscaDinamica()" placeholder="Busca Global..." class="flex-1 sm:flex-initial sm:w-48 lg:w-56 rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
@@ -350,6 +384,34 @@
                 </div>
             </section>
         </div>
+
+        <!-- ABA KANBAN -->
+        <section id="tab-kanban" class="hidden space-y-6 animate-fade-in">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <h2 class="text-xl font-bold dark:text-white flex items-center gap-2">📋 Quadro Operacional</h2>
+                <button onclick="abrirModalKanban()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-6 rounded-full shadow-md transition-colors w-full sm:w-auto">➕ Nova Tarefa</button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Coluna: A Fazer -->
+                <div class="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 border border-gray-200 dark:border-gray-700 flex flex-col min-h-[60vh]" ondragover="permitirDrop(event)" ondrop="soltarCartao(event, 'A Fazer')">
+                    <h3 class="font-extrabold text-gray-600 dark:text-gray-300 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide"><span class="w-3 h-3 rounded-full bg-red-400"></span> A Fazer <span id="qtd-a-fazer" class="ml-auto bg-gray-200 dark:bg-gray-700 px-2 py-0.5 rounded-full text-xs">0</span></h3>
+                    <div id="coluna-A-Fazer" class="flex-1 flex flex-col gap-3"></div>
+                </div>
+                
+                <!-- Coluna: Em Andamento -->
+                <div class="bg-blue-50/50 dark:bg-blue-900/10 rounded-2xl p-4 border border-blue-100 dark:border-blue-900/30 flex flex-col min-h-[60vh]" ondragover="permitirDrop(event)" ondrop="soltarCartao(event, 'Em Andamento')">
+                    <h3 class="font-extrabold text-blue-700 dark:text-blue-400 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide"><span class="w-3 h-3 rounded-full bg-blue-500"></span> Em Andamento <span id="qtd-em-andamento" class="ml-auto bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full text-xs">0</span></h3>
+                    <div id="coluna-Em-Andamento" class="flex-1 flex flex-col gap-3"></div>
+                </div>
+                
+                <!-- Coluna: Concluído -->
+                <div class="bg-emerald-50/50 dark:bg-emerald-900/10 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-900/30 flex flex-col min-h-[60vh]" ondragover="permitirDrop(event)" ondrop="soltarCartao(event, 'Concluído')">
+                    <h3 class="font-extrabold text-emerald-700 dark:text-emerald-400 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> Concluído <span id="qtd-concluido" class="ml-auto bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full text-xs">0</span></h3>
+                    <div id="coluna-Concluido" class="flex-1 flex flex-col gap-3"></div>
+                </div>
+            </div>
+        </section>
 
         <!-- ABA INTELIGÊNCIA -->
         <section id="tab-analise" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only">
@@ -683,9 +745,9 @@
                             <option value="MAIO">Mai</option>
                             <option value="JUNHO">Junho</option>
                             <option value="JULHO">Julho</option>
-                            <option value="AGOSTO">Ago</option>
-                            <option value="SETEMBRO">Set</option>
-                            <option value="OUTUBRO">Out</option>
+                            <option value="AGOSTO">Agosto</option>
+                            <option value="SETEMBRO">Setembro</option>
+                            <option value="OUTUBRO">Outubro</option>
                             <option value="NOVEMBRO">Nov</option>
                             <option value="DEZEMBRO">Dez</option>
                         </select>
