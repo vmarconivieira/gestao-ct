@@ -13,13 +13,12 @@ document.addEventListener('DOMContentLoaded', () => {
         
         aplicarPermissoes(); 
         carregarRascunhoForm(); 
-        carregarDadosIniciais(); // Chama do módulo vendas.js
-        restaurarEstadoImportacao(); // Chama do módulo importacao.js
+        carregarDadosIniciais(); 
+        restaurarEstadoImportacao(); 
     } else {
         const ls = document.getElementById('loginScreen'); if(ls) ls.classList.remove('hidden'); 
         const ac = document.getElementById('appContent'); if(ac) ac.classList.add('hidden');
-        
-        testarConexaoLogin(); // Chama do módulo auth.js
+        testarConexaoLogin(); 
     }
     
     document.querySelectorAll('.form-draft').forEach(el => { 
@@ -38,15 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-    const formAltSenha = document.getElementById('formAlterarSenha');
-    if(formAltSenha) formAltSenha.addEventListener('submit', async function(e) { /* A lógica está no auth.js */ });
-    
-    const formExcMes = document.getElementById('formExcluirMes');
-    if(formExcMes) formExcMes.addEventListener('submit', async function(e) { /* A lógica está no auth.js */ });
 });
 
-// COMPONENTES DE INTERFACE E CÁLCULOS
 function switchTab(id) {
     ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise'].forEach(t => { 
         const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); 
@@ -148,59 +140,3 @@ function calcularSimuladores() {
 }
 
 function limparSimulador() { ['calcVenda','calcCusto','calcImposto','calcComissao','calcFrete','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
-
-function abrirModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.remove('hidden'); const f = document.getElementById('formAlterarSenha'); if(f) f.reset(); }
-function fecharModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.add('hidden'); }
-function abrirModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.remove('hidden'); const da = document.getElementById('delMesAno'); if(da) da.value = new Date().getFullYear(); }
-function fecharModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.add('hidden'); }
-
-// ==========================================
-// FUNÇÕES DE CRUD DE SKUS E EQUIPE 
-// ==========================================
-function renderPaginaSkus(p) {
-    const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; 
-    skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b));
-    const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML='';
-    skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => {
-        let isActive = String(s.STATUS).trim().toUpperCase() !== "INATIVO";
-        let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400";
-        const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors";
-        tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; 
-        if(tb) tb.appendChild(tr);
-    });
-    const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; 
-    const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp;
-    const btnP = document.getElementById('btnPrevSkus'); if(btnP) btnP.disabled=paginaAtualSkus===1; 
-    const btnN = document.getElementById('btnNextSkus'); if(btnN) btnN.disabled=paginaAtualSkus===tp;
-}
-
-function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
-
-function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
-
-async function deletarSku(skuCode) { 
-    if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; 
-    if(!confirm(`Tem certeza que deseja apagar o produto SKU: ${skuCode}?`)) return; 
-    mostrarLoading("Apagando SKU..."); 
-    try { await db.from('custos_sku').delete().eq('sku', skuCode); await carregarDadosIniciais(); showToast("SKU Excluído!","success"); } 
-    catch(e) { showToast("Erro ao excluir", "error"); } finally { esconderLoading(); } 
-}
-
-const formSku = document.getElementById('formCadastroSku');
-if(formSku) {
-    formSku.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await db.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value, produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, custo_medio:document.getElementById('skuForm_custoMedio').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosIniciais(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} });
-}
-
-function renderTabelaUsuarios() {
-    const tb=document.getElementById('tabelaUsuarios'); if(!tb) return; tb.innerHTML='';
-    usuariosGlobais.forEach(u => { const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 font-bold text-gray-800 dark:text-gray-200 font-mono">${u.usuario}</td><td class="p-4 text-gray-700 dark:text-gray-300">${u.nome}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${u.nivel==='ADMIN'?'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300':'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'}">${u.nivel}</span></td><td class="p-4 text-center"><button onclick="editarUsuario('${u.usuario}','${u.nome}','${u.nivel}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarUsuario('${u.originalIndex}','${u.usuario}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; tb.appendChild(tr); });
-}
-
-function editarUsuario(u,n,l) { document.getElementById('userForm_user').value=u; document.getElementById('userForm_nome').value=n; document.getElementById('userForm_nivel').value=l; document.getElementById('userForm_senha').value=''; window.scrollTo(0,0); }
-
-const formUser = document.getElementById('formCadastroUser');
-if(formUser) {
-    formUser.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { const u=document.getElementById('userForm_user').value.toLowerCase(), s=document.getElementById('userForm_senha').value; const p={usuario:u, nome:document.getElementById('userForm_nome').value, nivel:document.getElementById('userForm_nivel').value}; const {data}=await db.from('usuarios').select('id,senha').eq('usuario',u); if(s) p.senha=await hashSHA256(s); else if(data&&data.length>0) p.senha=data[0].senha; else p.senha=await hashSHA256(u); if(data&&data.length>0) await db.from('usuarios').update(p).eq('id',data[0].id); else await db.from('usuarios').insert([p]); document.getElementById('formCadastroUser').reset(); await carregarDadosIniciais(); showToast("Salvo!","success"); } catch(er){} finally{esconderLoading();} });
-}
-
-async function deletarUsuario(id,u) { if(u===localStorage.getItem('app_auth_login'))return showToast("Você não pode se excluir.","error"); if(!confirm("Apagar?"))return; mostrarLoading(); try { await db.from('usuarios').delete().eq('id',id); await carregarDadosIniciais(); } catch(e){} finally{esconderLoading();} }
