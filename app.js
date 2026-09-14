@@ -15,7 +15,7 @@ const ITENS_POR_PAGINA = 50;
 let rawDataGlobal = [], importDataGlobal = [], importHeadersGlobal = [], produtosUnicosGlobal = [];
 let skusParaImportarGlobal = [];
 
-let debounceBuscaTimer = null; // Temporizador da Busca Dinâmica
+let debounceBuscaTimer = null; 
 
 // ==========================================
 // FUNÇÕES GLOBAIS E FERRAMENTAS
@@ -208,7 +208,7 @@ function acionarBuscaDinamica() {
     clearTimeout(debounceBuscaTimer);
     debounceBuscaTimer = setTimeout(() => {
         buscarVendasServidor();
-    }, 600); // Aguarda 600ms após o usuário parar de digitar
+    }, 600); 
 }
 
 async function buscarVendasServidor() {
@@ -224,10 +224,9 @@ async function buscarVendasServidor() {
         let q = db.from('vendas').select('*').order('created_at', { ascending: false });
         
         if (busca !== "") {
-            // Busca Global: Se tem texto, varre o banco inteiro ignorando a data
-            q = q.or(`n_venda.ilike.%${busca}%,sku.ilike.%${busca}%,descricao.ilike.%${busca}%`);
+            // Busca Global expandida: inclui Status
+            q = q.or(`n_venda.ilike.%${busca}%,sku.ilike.%${busca}%,descricao.ilike.%${busca}%,status.ilike.%${busca}%`);
         } else {
-            // Busca Local: Respeita o mês e ano do filtro
             if (ano !== "TODOS") q = q.eq('ano', ano);
             if (mes !== "TODOS") q = q.ilike('mes', mes);
         }
@@ -255,7 +254,10 @@ async function carregarDadosIniciais() {
 function aplicarFiltrosLocais() {
     const fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas');
     const o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : "";
-    vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b));
+    
+    // Adicionado filtro de status na busca rápida
+    vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b) || String(v.status).toLowerCase().includes(b));
+    
     if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro);
     atualizarCardsPainel(vendasFiltradasGlobal); atualizarGrafico(vendasFiltradasGlobal); carregarFiltroAnalise(); paginaAtualVendas=1; renderPaginaVendas(1);
 }
@@ -265,7 +267,7 @@ function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
 function renderPaginaVendas(p) {
     const tp=Math.ceil(vendasFiltradasGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualVendas=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaVendas'); if(tb) tb.innerHTML='';
     const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA);
-    if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="11" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
+    if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="12" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
     i.forEach(v => {
         let isAuto = v.nVenda.includes('MANUAL-') || v.nVenda.includes('AUTO-') || v.nVenda.includes('SYS-');
         let display_nv = isAuto ? 'Lançamento' : (v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda);
@@ -274,8 +276,22 @@ function renderPaginaVendas(p) {
         const sLow = v.status.toLowerCase();
         let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300');
         let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold");
+        
         const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors";
-        tr.innerHTML=`<td class="p-4 text-xs text-gray-500">${v.mes.substring(0,3)}/${v.ano}</td><td class="p-4 font-mono text-[10px] font-bold text-gray-400">${v.sku || '-'}</td><td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td><td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td><td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td><td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td><td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td><td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td><td class="p-4 text-right ${corMargem}">${v.porcentagem.toFixed(2)}%</td><td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`;
+        tr.innerHTML=`
+            <td class="p-4 text-xs text-gray-500">${v.mes.substring(0,3)}/${v.ano}</td>
+            <td class="p-4 font-mono text-[10px] font-bold text-gray-400">${v.sku || '-'}</td>
+            <td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao}</td>
+            <td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td>
+            <td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td>
+            <td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td>
+            <td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td>
+            <td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td>
+            <td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td>
+            <td class="p-4 text-right font-extrabold ${luc >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td>
+            <td class="p-4 text-right ${corMargem}">${v.porcentagem.toFixed(2)}%</td>
+            <td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>
+        `;
         if(tb) tb.appendChild(tr);
     });
     const lblP = document.getElementById('lblPaginaVendas'); if(lblP) lblP.innerText=paginaAtualVendas; 
@@ -411,7 +427,6 @@ function iniciarImportacao(e) {
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
 
-// O TRACTOR DE DATAS TURBINADO
 function extrairMesAnoDaData(d) { 
     if(!d) return null; 
     let str = String(d).toLowerCase().replace(/\s+/g, ' ').trim(); 
