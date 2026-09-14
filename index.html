@@ -11,6 +11,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 text-gray-800 dark:from-gray-900 dark:via-gray-800 dark:to-slate-900 dark:text-gray-100 min-h-screen p-3 sm:p-5 transition-colors duration-500">
@@ -71,7 +72,7 @@
             </form>
         </div>
     </div>
-
+    
     <div id="modalExcluirMes" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-red-100 dark:border-red-900 animate-fade-in">
             <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold dark:text-white flex items-center text-red-600 dark:text-red-400"><span class="mr-2">⚠️</span> Excluir Mês</h3><button onclick="fecharModalExcluirMes()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button></div>
@@ -154,7 +155,27 @@
                         <select id="ordenacao" onchange="aplicarFiltrosLocais()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm font-bold"><option value="recentes">⇅ Recentes</option><option value="margem_alta">↑ Maior Margem</option><option value="lucro_alto">↑ Maior Lucro</option></select>
                     </div>
                 </div>
-                <div class="overflow-x-auto rounded-2xl custom-scrollbar border border-gray-100 dark:border-gray-700"><table class="w-full text-left min-w-[1000px]"><thead class="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase border-b border-gray-100 dark:border-gray-700"><tr><th class="p-4">Período</th><th class="p-4">Cód. Produto</th><th class="p-4 w-1/4">Descrição</th><th class="p-4 text-center">Status</th><th class="p-4 text-center">Canal</th><th class="p-4 text-center">Qtd</th><th class="p-4 text-right">Bruto</th><th class="p-4 text-right">Repasse</th><th class="p-4 text-right">Custo</th><th class="p-4 text-right">Lucro</th><th class="p-4 text-right">Margem</th><th class="p-4 text-center admin-only">Ação</th></tr></thead></table></div>
+                <div class="overflow-x-auto rounded-2xl custom-scrollbar border border-gray-100 dark:border-gray-700">
+                    <table class="w-full text-left min-w-[1000px]">
+                        <thead class="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase border-b border-gray-100 dark:border-gray-700">
+                            <tr>
+                                <th class="p-4">Período</th>
+                                <th class="p-4">Cód. Produto</th>
+                                <th class="p-4 w-1/4">Descrição</th>
+                                <th class="p-4 text-center">Status</th>
+                                <th class="p-4 text-center">Canal</th>
+                                <th class="p-4 text-center">Qtd</th>
+                                <th class="p-4 text-right">Bruto</th>
+                                <th class="p-4 text-right">Repasse</th>
+                                <th class="p-4 text-right">Custo</th>
+                                <th class="p-4 text-right">Lucro</th>
+                                <th class="p-4 text-right">Margem</th>
+                                <th class="p-4 text-center admin-only">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaVendas" class="text-sm bg-white dark:bg-gray-900/50"></tbody>
+                    </table>
+                </div>
                 
                 <div class="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4 border-t border-gray-200 dark:border-gray-700 pt-4">
                     <span class="text-xs font-bold text-gray-500 dark:text-gray-400">Páginas de Histórico</span>
@@ -285,7 +306,7 @@
                     <div id="indDataAutomatica" class="hidden absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg rounded-tr-2xl shadow-sm z-10">Data Automática da Planilha Ativa</div>
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Plataforma</label><select id="globalPlataforma" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold"><option value="Mercado Livre">Mercado Livre</option><option value="Shopee">Shopee</option><option value="Direto">Direto</option></select></div>
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Ano</label><input type="number" id="globalAno" oninput="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800"></div>
-                    <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Mês</label><select id="globalMes" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800"><option value="JANEIRO">Jan</option><option value="FEVEREIRO">Fev</option><option value="MARÇO">Mar</option><option value="ABRIL">Abr</option><option value="MAIO">Mai</option><option value="JUNHO">Jun</option><option value="JULHO">Jul</option><option value="AGOSTO">Agosto</option><option value="SETEMBRO">Set</option><option value="OUTUBRO">Out</option><option value="NOVEMBRO">Nov</option><option value="DEZEMBRO">Dez</option></select></div>
+                    <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Mês</label><select id="globalMes" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800"><option value="JANEIRO">Jan</option><option value="FEVEREIRO">Fev</option><option value="MARÇO">Mar</option><option value="ABRIL">Abril</option><option value="MAIO">Mai</option><option value="JUNHO">Junho</option><option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option><option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option><option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dezembro</option></select></div>
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Imposto Padrão (%)</label><input type="number" id="globalImposto" oninput="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold"></div>
                 </div>
 
