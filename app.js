@@ -245,8 +245,10 @@ function renderPaginaVendas(p) {
     const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA);
     if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="11" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
     i.forEach(v => {
-        let original_nv = v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda; 
-        const l=v.urlPlataforma?`<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${original_nv.includes('MANUAL') ? 'Link' : original_nv} ↗</a>`: (original_nv.includes('MANUAL') ? '-' : original_nv);
+        let isAuto = v.nVenda.includes('MANUAL-') || v.nVenda.includes('AUTO-') || v.nVenda.includes('SYS-');
+        let display_nv = isAuto ? 'Lançamento' : (v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda);
+        
+        const l = v.urlPlataforma ? `<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${display_nv} ↗</a>` : display_nv;
         const sLow = v.status.toLowerCase();
         let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300');
         let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold");
@@ -387,7 +389,7 @@ function iniciarImportacao(e) {
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
 
-// O TRACTOR DE DATAS TURBINADO COM FORÇA-BRUTA
+// O TRACTOR DE DATAS TURBINADO E BLINDADO
 function extrairMesAnoDaData(d) { 
     if(!d) return null; 
     let str = String(d).toLowerCase().replace(/\s+/g, ' ').trim(); 
@@ -395,46 +397,41 @@ function extrairMesAnoDaData(d) {
     const mapMes = {"janeiro":"JANEIRO","fevereiro":"FEVEREIRO","março":"MARÇO","abril":"ABRIL","maio":"MAIO","junho":"JUNHO","julho":"JULHO","agosto":"AGOSTO","setembro":"SETEMBRO","outubro":"OUTUBRO","novembro":"NOVEMBRO","dezembro":"DEZEMBRO", "jan":"JANEIRO", "fev":"FEVEREIRO", "mar":"MARÇO", "abr":"ABRIL", "mai":"MAIO", "jun":"JUNHO", "jul":"JULHO", "ago":"AGOSTO", "set":"SETEMBRO", "out":"OUTUBRO", "nov":"NOVEMBRO", "dez":"DEZEMBRO"};
     const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
 
-    // 1. Formato BR (DD/MM/YYYY ou DD/MM/YY)
+    // Scanner Regex Agressivo (Lida com '12 de setembro de 2026 21:12 hs.')
+    let mlRegex = /(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i;
+    let mlMatch = str.match(mlRegex);
+    if(mlMatch) { return { mes: mapMes[mlMatch[1].toLowerCase()], ano: parseInt(mlMatch[2]) }; }
+
+    // Formato BR (DD/MM/YYYY ou DD/MM/YY)
     let regBr = str.match(/(\d{2})\/(\d{2})\/(\d{2,4})/); 
     if(regBr && regBr[1].length === 2 && regBr[2].length === 2) { 
-        let y = parseInt(regBr[3]);
-        if (y < 100) y += 2000;
-        let mIndex = parseInt(regBr[2]) - 1;
-        if (mIndex >= 0 && mIndex <= 11) return { mes: mArr[mIndex], ano: y }; 
+        let y = parseInt(regBr[3]); if (y < 100) y += 2000;
+        let mIndex = parseInt(regBr[2]) - 1; if (mIndex >= 0 && mIndex <= 11) return { mes: mArr[mIndex], ano: y }; 
     }
     
-    // 2. Formato Internacional (YYYY-MM-DD)
+    // Formato Internacional (YYYY-MM-DD)
     let regInt = str.match(/(\d{4})-(\d{2})-(\d{2})/); 
     if(regInt) { 
-        let mIndex = parseInt(regInt[2]) - 1;
-        if (mIndex >= 0 && mIndex <= 11) return { mes: mArr[mIndex], ano: parseInt(regInt[1]) }; 
+        let mIndex = parseInt(regInt[2]) - 1; if (mIndex >= 0 && mIndex <= 11) return { mes: mArr[mIndex], ano: parseInt(regInt[1]) }; 
     }
 
-    // 3. Formato ML Padrão ("31 de agosto de 2026")
+    // Formato ML Antigo ("31 de agosto de 2026")
     let p = str.split(' de '); 
     if(p.length >= 3) { 
-        let mesStr = p[1].trim(); 
-        let m = mapMes[mesStr]; 
-        let yearStr = p[2].trim().substring(0,4);
+        let mesStr = p[1].trim(); let m = mapMes[mesStr]; let yearStr = p[2].trim().substring(0,4);
         if(m && !isNaN(yearStr)) return { mes: m, ano: parseInt(yearStr) }; 
     }
 
-    // 4. Scanner de Força Bruta (Se o ML mandar "setembro 2026" ou "05-ago-2025")
-    for (let key in mapMes) {
-        if (str.includes(key)) {
-            let yearMatch = str.match(/\d{4}/);
-            if (yearMatch) return { mes: mapMes[key], ano: parseInt(yearMatch[0]) };
-        }
-    }
+    // Scanner de Força Bruta
+    for (let key in mapMes) { if (str.includes(key)) { let yearMatch = str.match(/\d{4}/); if (yearMatch) return { mes: mapMes[key], ano: parseInt(yearMatch[0]) }; } }
     
-    // 5. Formato Excel Puro Numérico
+    // Formato Excel Puro Numérico
     if (!isNaN(str) && Number(str) > 20000 && Number(str) < 99999) {
         let date = new Date(Math.round((Number(str) - 25569) * 86400 * 1000));
         return { mes: mArr[date.getUTCMonth()], ano: date.getUTCFullYear() };
     }
 
-    // 6. Fallback Javascript
+    // Fallback Javascript
     let dObj = new Date(str);
     if(!isNaN(dObj.getTime()) && str.length > 6) return { mes: mArr[dObj.getMonth()], ano: dObj.getFullYear() };
     
@@ -444,13 +441,28 @@ function extrairMesAnoDaData(d) {
 function extrairProdutosUnicos() {
     const md = document.getElementById('map_desc'), ms = document.getElementById('map_sku'), cd=md?md.value:'', cs=ms?ms.value:''; const ac=document.getElementById('areaCustosDinamicos'), lc=document.getElementById('listaCustosProdutos'); if(lc) lc.innerHTML='';
     if(!cd) { if(ac) ac.classList.add('hidden'); return; } const map={}; importDataGlobal.forEach(r=>{const d=r[cd]?String(r[cd]).trim():""; if(d&&!map[d])map[d]=cs&&r[cs]?String(r[cs]).trim().toUpperCase():"";});
-    produtosUnicosGlobal=Object.keys(map); window.custosMapeadosLote={}; let hp="";
+    produtosUnicosGlobal=Object.keys(map); window.custosMapeadosLote={}; 
+    
+    let skusFaltantes = false;
+    let htmlInputs = "";
+
     produtosUnicosGlobal.forEach((p,i) => {
         let sc=0; const rsku=map[p];
         if(rsku&&catalogoSkus[rsku]) sc=catalogoSkus[rsku].custo_atual; else { const f=Object.keys(catalogoSkus).find(k=>catalogoSkus[k].produto.toLowerCase()===p.toLowerCase()); if(f) sc=catalogoSkus[f].custo_atual; }
-        window.custosMapeadosLote[p]=sc; if(sc<=0) hp+=`<div class="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg mb-2 shadow-sm"><span class="text-xs font-bold text-gray-700 dark:text-gray-300 w-2/3 truncate" title="${p}">${p}</span><input type="number" step="0.01" class="w-1/3 p-2 border border-gray-300 dark:border-gray-600 rounded text-xs font-bold text-red-600 dark:bg-gray-700 dark:text-red-400 outline-none focus:ring-2 focus:ring-red-500" oninput="window.custosMapeadosLote['${p.replace(/'/g,"\\'")}']=Number(this.value)||0; renderPreviewImportacao();" placeholder="R$ Custo"></div>`;
+        window.custosMapeadosLote[p]=sc; 
+        if(sc<=0) {
+            skusFaltantes = true;
+            htmlInputs+=`<div class="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg mb-2 shadow-sm"><span class="text-xs font-bold text-gray-700 dark:text-gray-300 w-2/3 truncate" title="${p}">${p}</span><input type="number" step="0.01" class="w-1/3 p-2 border border-gray-300 dark:border-gray-600 rounded text-xs font-bold text-red-600 dark:bg-gray-700 dark:text-red-400 outline-none focus:ring-2 focus:ring-red-500" oninput="window.custosMapeadosLote['${p.replace(/'/g,"\\'")}']=Number(this.value)||0; renderPreviewImportacao();" placeholder="R$ Custo"></div>`;
+        }
     });
-    if(hp) { if(ac) ac.classList.remove('hidden'); if(lc) lc.innerHTML=hp; } else { if(ac) ac.classList.add('hidden'); }
+
+    if(skusFaltantes) { 
+        let toggleHtml = `<div class="mb-4 flex items-center justify-between bg-blue-50 dark:bg-blue-900/30 p-3 rounded-xl border border-blue-200 dark:border-blue-800"><span class="text-sm font-bold text-blue-800 dark:text-blue-300">💾 Salvar custos no Catálogo?</span><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="toggleSalvarSkus" class="sr-only peer" checked><div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div></label></div>`;
+        if(ac) ac.classList.remove('hidden'); 
+        if(lc) lc.innerHTML = toggleHtml + htmlInputs; 
+    } else { 
+        if(ac) ac.classList.add('hidden'); 
+    }
 }
 
 function renderPreviewImportacao() {
@@ -483,23 +495,27 @@ function atualizarMapeamentoDinamico() {
 
 function construirInterfaceMapeamento() {
     const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML='';
-    // Pedido removido, Nº Venda assume o protagonismo na importação
+    // Mapeamento Estrito: Prioriza Correspondência Exata
     [
         {id:'map_data',l:'Data',s:['Data da venda', 'Data']}, 
         {id:'map_sku',l:'SKU',s:['SKU']}, 
         {id:'map_desc',l:'Descrição',s:['Título do anúncio', 'Descrição', 'Título']}, 
         {id:'map_nven',l:'Nº Venda',s:['N.º de venda', 'Nº de venda', 'N.º']},
-        {id:'map_qtd',l:'Qtd',s:['Unidades', 'Unidade', 'Qtd']}, 
+        {id:'map_qtd',l:'Qtd',s:['Unidades', 'Unidade', 'Quantidade', 'Qtd']}, 
         {id:'map_status',l:'Status',s:['Estado', 'Status']}, 
-        {id:'map_venda',l:'Venda (R$)',s:['Preço unitário', 'Receita por pro', 'Venda', 'Bruto']}, 
-        {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por envio']}, 
-        {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de venda', 'Taxa']}, 
-        {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de envio', 'Frete']}, 
-        {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamentos e reembolsos', 'Cancelamento', 'Estorno']}, 
-        {id:'map_total',l:'Total (R$)',s:['Total']}
+        {id:'map_venda',l:'Venda (R$)',s:['Preço unitário de venda do anúncio', 'Preço unitário', 'Receita por pro', 'Venda', 'Bruto']}, 
+        {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por envio (BRL)', 'Receita por envio']}, 
+        {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de venda e impostos (BRL)', 'Tarifa de venda', 'Taxa']}, 
+        {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de envio (BRL)', 'Tarifas de envio', 'Frete']}, 
+        {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamentos e reembolsos (BRL)', 'Cancelamentos e reembolsos', 'Cancelamento', 'Estorno']}, 
+        {id:'map_total',l:'Total (R$)',s:['Total (BRL)', 'Total']}
     ].forEach(f => {
+        let bestMatch = "";
+        for(let s of f.s) { let exact = importHeadersGlobal.find(hd => hd.toLowerCase() === s.toLowerCase()); if(exact) { bestMatch = exact; break; } }
+        if(!bestMatch) { for(let s of f.s) { let partial = importHeadersGlobal.find(hd => hd.toLowerCase().includes(s.toLowerCase())); if(partial) { bestMatch = partial; break; } } }
+
         let h=`<div class="flex flex-col bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm"><label class="text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">${f.l}</label><select id="${f.id}" onchange="atualizarMapeamentoDinamico()" class="p-2.5 outline-none text-xs border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"><option value="">-- Ignorar --</option>`;
-        importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${f.s.some(x=>hd.toLowerCase().includes(x.toLowerCase()))?'selected':''}>${hd}</option>`; });
+        importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${hd === bestMatch ? 'selected' : ''}>${hd}</option>`; });
         c.innerHTML+=h+'</select></div>';
     }); atualizarMapeamentoDinamico();
 }
@@ -524,6 +540,12 @@ async function processarEnvioEmLote() {
     let mapVendas = {}, orderIndices = {}, qN = 0, qA = 0;
     let novosSkusParaSalvar = [];
     let skuTrackSet = new Set();
+    
+    // Captura o estado do Toggle de Salvar SKUs (Se não existir, assume false)
+    const tglSku = document.getElementById('toggleSalvarSkus');
+    const allowSaveSkus = tglSku ? tglSku.checked : false;
+    
+    let batchTime = Date.now().toString(36).toUpperCase();
     
     for(let i = 0; i < importDataGlobal.length; i++) {
         let r = importDataGlobal[i];
@@ -554,7 +576,7 @@ async function processarEnvioEmLote() {
         if(canc){rp=0;imp=0;cst=0;} let sob=trep-imp, luc=sob-cst, mar=rp>0?luc/rp:0;
         
         let finalSku = sk || ds.toUpperCase();
-        if (unit_cost > 0 && !skuTrackSet.has(finalSku)) {
+        if (allowSaveSkus && unit_cost > 0 && !skuTrackSet.has(finalSku)) {
             skuTrackSet.add(finalSku);
             let existing = catalogoSkus[finalSku] || Object.values(catalogoSkus).find(x => x.produto.toLowerCase() === ds.toLowerCase());
             if (!existing || existing.custo_atual <= 0) {
@@ -567,9 +589,7 @@ async function processarEnvioEmLote() {
         let exv = vendasGlobais.some(v => v.nVenda === nv_banco && v.plataforma === pG);
         let key = `${pG}_${nv_banco}`;
         
-        if (!mapVendas[key]) {
-            if(exv) qA++; else qN++;
-        }
+        if (!mapVendas[key]) { if(exv) qA++; else qN++; }
         
         mapVendas[key] = { ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: nv_banco, plataforma: pG, url_ml: urlML, valor_venda: rp, sobra: sob, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es };
     }
@@ -577,7 +597,6 @@ async function processarEnvioEmLote() {
     let b = Object.values(mapVendas);
     if(b.length>0) {
         try { 
-            // UPSERT VERDADEIRO: Atualiza os registros se o Nº de Venda já existir (Ideal para acompanhar Status)
             const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); 
             if(error) throw error; 
             
