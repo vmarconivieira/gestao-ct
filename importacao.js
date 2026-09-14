@@ -5,9 +5,20 @@ function iniciarImportacao(e) {
             const s=w.Sheets[w.SheetNames[0]]; rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
             if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Planilha vazia","error"); }
             let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}}
-            importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?String(h).trim():`Vazia_${i}`); 
+            
+            // APLICANDO FIXTEXT AOS CABEÇALHOS
+            importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?fixText(String(h)).trim():`Vazia_${i}`); 
             importDataGlobal=[];
-            for(let i=ml+1;i<rawDataGlobal.length;i++){ let o={}, hd=false; rawDataGlobal[i].forEach((v,id)=>{ o[importHeadersGlobal[id]]=v; if(String(v).trim()!=="") hd=true; }); if(hd) importDataGlobal.push(o); }
+            for(let i=ml+1;i<rawDataGlobal.length;i++){ 
+                let o={}, hd=false; 
+                rawDataGlobal[i].forEach((v,id)=>{ 
+                    // APLICANDO FIXTEXT AS CÉLULAS
+                    let val = (typeof v === 'string') ? fixText(v) : v;
+                    o[importHeadersGlobal[id]]=val; 
+                    if(String(val).trim()!=="") hd=true; 
+                }); 
+                if(hd) importDataGlobal.push(o); 
+            }
             const dt=new Date(); const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto';
             construirInterfaceMapeamento(); const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); const fid = document.getElementById('fileImportData'); if(fid) fid.value=""; esconderLoading();
         } catch(err) { esconderLoading(); showToast("Erro: " + err.message, "error"); }
@@ -16,7 +27,6 @@ function iniciarImportacao(e) {
 
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
-function restaurarEstadoImportacao() {} 
 
 function extrairMesAnoDaData(d) { 
     if(!d) return null; let str = String(d).toLowerCase().trim(); let p = str.split(' de '); 
@@ -80,7 +90,6 @@ async function processarEnvioEmLote() {
     const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cnvEl=document.getElementById('map_nven'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total');
     const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
     
-    // Contagem de pedidos para evitar sobrescrita do ML
     let orderCounts = {};
     for(let r of importDataGlobal) { if(r[cDesc]) { let nv = r[cNv] || "-"; orderCounts[nv] = (orderCounts[nv] || 0) + 1; } }
     
@@ -117,7 +126,7 @@ async function processarEnvioEmLote() {
             const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); 
             await buscarVendasServidor(); 
             const rm=document.getElementById('modalResumoLote'); if(rm) rm.classList.remove('hidden'); 
-        } catch(e) { showToast("Erro na importação: " + (e.message || "Falha ao enviar."), "error"); }
+        } catch(e) { showToast("Erro na importação.", "error"); }
     } else { showToast("Nenhuma linha válida.", "error"); }
     esconderLoading();
 }
@@ -128,12 +137,15 @@ function importarCsvSkus(e) {
         try {
             const s=w.Sheets[w.SheetNames[0]]; const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
             if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados.");
-            const h = rawData[0].map(x=>String(x).trim().toUpperCase()); const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>String(x).includes("CUSTO"));
-            if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido. Faltam colunas SKU ou PRODUTO.");
+            // FIXTEXT APLICADO AOS SKUS
+            const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase()); 
+            const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO"));
+            if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido.");
             const mapSkus = {}; 
             for(let i=1;i<rawData.length;i++){ 
                 const row = rawData[i]; if(row.filter(c=>String(c).trim()!=="").length === 0) continue; 
-                let prodName = iP>-1 ? String(row[iP]).trim() : '', skuCode = iS>-1 && String(row[iS]).trim() !== "" ? String(row[iS]).trim().toUpperCase() : prodName.toUpperCase();
+                let prodName = iP>-1 ? fixText(String(row[iP])).trim() : '';
+                let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase();
                 if(!skuCode) continue; 
                 let valStr = iC>-1 ? row[iC] : 0; mapSkus[skuCode] = { sku: skuCode, produto: prodName || skuCode, custo_atual: universalNumberParse(valStr), status:'Ativo' }; 
             }
