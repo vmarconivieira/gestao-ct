@@ -188,6 +188,36 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch(er){showToast("Erro: " + er.message, "error");} finally {esconderLoading();}
         });
     }
+    
+    // Lógica do Modal de Edição
+    const formEdicaoVenda = document.getElementById('formEditarVenda');
+    if(formEdicaoVenda) {
+        formEdicaoVenda.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            mostrarLoading("Salvando...");
+            const id = document.getElementById('edit_id').value;
+            const status = document.getElementById('edit_status').value;
+            const sobra = Number(document.getElementById('edit_repasse').value) || 0;
+            const imposto = Number(document.getElementById('edit_imposto').value) || 0;
+            const custo = Number(document.getElementById('edit_custo').value) || 0;
+            const valorVenda = Number(document.getElementById('edit_venda_bruta').value) || 0;
+            
+            const lucro = sobra - imposto - custo;
+            const porcentagem = valorVenda > 0 ? (lucro / valorVenda) : 0;
+
+            try {
+                const { error } = await db.from('vendas').update({ status, sobra, imposto, custo, lucro, porcentagem }).eq('id', id);
+                if (error) throw error;
+                fecharModalEditarVenda();
+                await buscarVendasServidor();
+                showToast("Venda atualizada com sucesso!", "success");
+            } catch(err) {
+                showToast("Erro ao editar: " + err.message, "error");
+            } finally {
+                esconderLoading();
+            }
+        });
+    }
 });
 
 function fazerLogout() { localStorage.clear(); location.reload(); }
@@ -195,6 +225,39 @@ function abrirModalSenha() { const m = document.getElementById('modalSenha'); if
 function fecharModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.add('hidden'); }
 function abrirModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.remove('hidden'); const da = document.getElementById('delMesAno'); if(da) da.value = new Date().getFullYear(); }
 function fecharModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.add('hidden'); }
+
+// ==========================================
+// FUNÇÕES DE EDIÇÃO E BUSCA DINÂMICA
+// ==========================================
+function abrirModalEditarVenda(id) {
+    const v = vendasGlobais.find(x => x.originalIndex == id);
+    if(!v) return;
+    document.getElementById('edit_id').value = v.originalIndex;
+    document.getElementById('edit_descricao').value = v.descricao;
+    document.getElementById('edit_status').value = v.status;
+    document.getElementById('edit_repasse').value = v.sobra;
+    document.getElementById('edit_imposto').value = v.imposto;
+    document.getElementById('edit_custo').value = v.custo;
+    document.getElementById('edit_venda_bruta').value = v.valorVenda;
+    calcularEditMargem();
+    document.getElementById('modalEditarVenda').classList.remove('hidden');
+}
+
+function fecharModalEditarVenda() { 
+    document.getElementById('modalEditarVenda').classList.add('hidden'); 
+}
+
+function calcularEditMargem() {
+    const repasse = Number(document.getElementById('edit_repasse').value) || 0;
+    const imposto = Number(document.getElementById('edit_imposto').value) || 0;
+    const custo = Number(document.getElementById('edit_custo').value) || 0;
+    const lucro = repasse - imposto - custo;
+    const preview = document.getElementById('edit_lucro_preview');
+    if(preview) {
+        preview.innerText = formatMoney(lucro);
+        preview.className = lucro >= 0 ? "text-emerald-500 font-extrabold text-xl" : "text-red-500 font-extrabold text-xl";
+    }
+}
 
 function acionarBuscaDinamica() {
     clearTimeout(debounceBuscaTimer);
@@ -281,7 +344,10 @@ function renderPaginaVendas(p) {
             <td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td>
             <td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td>
             <td class="p-4 text-right ${corMargem}">${(v.porcentagem || 0).toFixed(2)}%</td>
-            <td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>
+            <td class="p-4 admin-only text-center whitespace-nowrap">
+                <button onclick="abrirModalEditarVenda('${v.originalIndex}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button>
+                <button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button>
+            </td>
         `;
         if(tb) tb.appendChild(tr);
     });
@@ -291,8 +357,9 @@ function renderPaginaVendas(p) {
     const btnN = document.getElementById('btnNextVendas'); if(btnN) btnN.disabled=paginaAtualVendas===tp;
 }
 
-async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN')return; if(!confirm("Apagar?"))return; mostrarLoading("Apagando..."); try { await db.from('vendas').delete().eq('id',id); await buscarVendasServidor(); showToast("Excluído!","success"); } catch(e){} finally{esconderLoading();} }
-
+// ==========================================
+// INTERFACE: DASHBOARD E CALCULADORA
+// ==========================================
 function switchTab(id) {
     ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise'].forEach(t => { 
         const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); 
@@ -359,7 +426,26 @@ function gerarCanvasAreaTopo() {
         setTimeout(() => { html2canvas(a, {scale:2, useCORS:true, width:cW, windowWidth:cW}).then(c => { a.style.width=oW; a.style.padding=oP; a.style.backgroundColor=oB; if(s && w) s.style.display=''; res(c); }).catch(rej); }, 500);
     });
 }
-function exportarRelatorioPNG() { mostrarLoading(); gerarCanvasAreaTopo().then(c => { const l=document.createElement('a'); l.download=`Relatorio.png`; l.href=c.toDataURL('image/png'); l.click(); esconderLoading(); }).catch(e=>esconderLoading()); }
+
+function exportarRelatorioPNG() { 
+    mostrarLoading("Gerando imagem..."); 
+    gerarCanvasAreaTopo().then(c => { 
+        c.toBlob(async (blob) => {
+            try {
+                const f = new File([blob], "Relatorio_Vendas.png", { type: "image/png" });
+                if (navigator.canShare && navigator.canShare({ files: [f] })) {
+                    await navigator.share({ title: 'Gestão S&H', text: 'Resumo Financeiro Atualizado', files: [f] });
+                } else {
+                    const l = document.createElement('a'); l.download = `Relatorio_Vendas.png`; l.href = URL.createObjectURL(blob); l.click();
+                }
+            } catch (e) {
+                console.log("Compartilhamento cancelado ou erro na API nativa.");
+            } finally {
+                esconderLoading();
+            }
+        }, "image/png");
+    }).catch(e => { esconderLoading(); showToast("Erro", "error"); }); 
+}
 
 function calcularMargemForm() { 
     const q=Number(document.getElementById('quantidade')?.value)||1, v=Number(document.getElementById('valorUnitario')?.value)||0, i=Number(document.getElementById('imposto')?.value)||0, c=Number(document.getElementById('custo')?.value)||0; 
@@ -379,6 +465,9 @@ function calcularSimuladores() {
 }
 function limparSimulador() { ['calcVenda','calcCusto','calcImposto','calcComissao','calcFrete','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
 
+// ==========================================
+// MOTOR DE IMPORTAÇÃO DE LOTE
+// ==========================================
 function iniciarImportacao(e) {
     const f=e.target.files[0]; if(!f) return; mostrarLoading("Analisando Vendas...");
     lerPlanilha(f, (w) => {
