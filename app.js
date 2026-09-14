@@ -6,7 +6,7 @@ try { db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
 catch(e) { console.error("Falha ao inicializar o Supabase:", e); }
 
 let vendasGlobais=[], vendasFiltradasGlobal=[], catalogoSkusGlobais=[], skusFiltradosGlobal=[], catalogoSkus={}; 
-let usuariosGlobais=[], graficoInstance=null, chartAnalise=null, isDarkMode=false, isFetching=false;
+let usuariosGlobais=[], tarefasKanban=[], graficoInstance=null, chartAnalise=null, isDarkMode=false, isFetching=false;
 let paginaAtualVendas=1, paginaAtualSkus=1; const ITENS_POR_PAGINA=50;
 let rawDataGlobal=[], importDataGlobal=[], importHeadersGlobal=[], produtosUnicosGlobal=[], skusParaImportarGlobal=[];
 let debounceBuscaTimer=null; 
@@ -48,6 +48,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const formEdicaoVenda = document.getElementById('formEditarVenda');
     if(formEdicaoVenda) { formEdicaoVenda.addEventListener('submit', async function(e) { e.preventDefault(); mostrarLoading("Salvando..."); const id = document.getElementById('edit_id').value; const status = document.getElementById('edit_status').value; const sobra = Number(document.getElementById('edit_repasse').value) || 0; const imposto = Number(document.getElementById('edit_imposto').value) || 0; const custo = Number(document.getElementById('edit_custo').value) || 0; const valorVenda = Number(document.getElementById('edit_venda_bruta').value) || 0; const lucro = sobra - imposto - custo; const porcentagem = valorVenda > 0 ? (lucro / valorVenda) : 0; try { const { error } = await db.from('vendas').update({ status, sobra, imposto, custo, lucro, porcentagem }).eq('id', id); if (error) throw error; fecharModalEditarVenda(); await buscarVendasServidor(); showToast("Venda atualizada com sucesso!", "success"); } catch(err) { showToast("Erro ao editar: " + err.message, "error"); } finally { esconderLoading(); } }); }
+    
+    // FORMULÁRIO DO KANBAN
+    const fKanban = document.getElementById('formKanban');
+    if(fKanban) {
+        fKanban.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            mostrarLoading("Salvando...");
+            const titulo = document.getElementById('kanban_titulo').value;
+            const descricao = document.getElementById('kanban_descricao').value;
+            const prioridade = document.getElementById('kanban_prioridade').value;
+            try {
+                const { error } = await db.from('kanban').insert([{ titulo, descricao, prioridade, status: 'A Fazer' }]);
+                if (error) throw error;
+                fecharModalKanban();
+                fKanban.reset();
+                await buscarKanban();
+                showToast("Tarefa criada!", "success");
+            } catch(er) {
+                showToast("Falha (Crie a tabela kanban no Supabase)", "error");
+            } finally {
+                esconderLoading();
+            }
+        });
+    }
 });
 
 function fazerLogout() { localStorage.clear(); location.reload(); }
@@ -64,15 +88,99 @@ function acionarBuscaDinamica() { clearTimeout(debounceBuscaTimer); debounceBusc
 
 async function buscarVendasServidor() { const fA = document.getElementById('filtroAno'); const fM = document.getElementById('filtroMes'); const fB = document.getElementById('buscaVendas'); const ano = fA ? fA.value : new Date().getFullYear().toString(); const mes = fM ? fM.value : ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][new Date().getMonth()]; const busca = fB ? fB.value.trim() : ""; mostrarLoading("Buscando dados..."); try { let q = db.from('vendas').select('*').order('created_at', { ascending: false }); if (busca !== "") { q = q.or(`n_venda.ilike.*${busca}*,sku.ilike.*${busca}*,descricao.ilike.*${busca}*,status.ilike.*${busca}*`); } else { if (ano !== "TODOS") q = q.eq('ano', ano); if (mes !== "TODOS") q = q.ilike('mes', mes); } const { data, error } = await q; if (error) throw error; vendasGlobais = (data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes).toUpperCase(), qtd: v.quantidade, descricao: v.descricao, sku: v.sku, nVenda: v.n_venda, urlPlataforma: v.url_ml, plataforma: v.plataforma, valorVenda: Number(v.valor_venda), sobra: Number(v.sobra), imposto: Number(v.imposto), custo: Number(v.custo), lucro: Number(v.lucro), porcentagem: Number(v.porcentagem)*100, status: v.status })); aplicarFiltrosLocais(); } catch (e) { showToast("Erro ao buscar vendas: " + (e.message || e), "error"); } finally { esconderLoading(); } }
 
-async function carregarDadosIniciais() { mostrarLoading("Sincronizando DB..."); try { const [sR, uR] = await Promise.all([ db.from('custos_sku').select('*'), db.from('usuarios').select('*') ]); if (sR.data) { catalogoSkusGlobais = sR.data.map(s => ({ SKU: s.sku, PRODUTO: s.produto, CUSTO_ANTERIOR: s.custo_anterior, CUSTO_ATUAL: s.custo_atual, CUSTO_MEDIO: s.custo_medio, FORNECEDOR: s.fornecedor, DATA_ATUALIZACAO: s.data_atualizacao, STATUS: s.status })); parseSkusDictionary(); renderPaginaSkus(1); } if (uR.data) { usuariosGlobais = uR.data.map(u => ({ usuario: u.usuario, nome: u.nome, nivel: u.nivel, originalIndex: u.id })); renderTabelaUsuarios(); } await buscarVendasServidor(); const ind = document.getElementById('statusConexao'), txt = document.getElementById('textoConexao'); if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText = `Online`; } catch (e) { showToast("Falha na sincronização: " + (e.message || e), "error"); } finally { esconderLoading(); } }
+// ==========================================
+// KANBAN LOGIC
+// ==========================================
+function abrirModalKanban() { document.getElementById('modalKanban').classList.remove('hidden'); }
+function fecharModalKanban() { document.getElementById('modalKanban').classList.add('hidden'); }
+
+async function buscarKanban() {
+    try {
+        const { data, error } = await db.from('kanban').select('*').order('created_at', { ascending: false });
+        if (!error && data) {
+            tarefasKanban = data;
+            renderKanban();
+        }
+    } catch (e) {
+        console.log("Kanban não iniciado ou tabela ausente.");
+    }
+}
+
+function parseLinks(text) {
+    if (!text) return '';
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return text.replace(urlRegex, function(url) {
+        return `<a href="${url}" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all">${url}</a>`;
+    });
+}
+
+function renderKanban() {
+    const colunas = { 'A Fazer': [], 'Em Andamento': [], 'Concluído': [] };
+    tarefasKanban.forEach(t => { if(colunas[t.status]) colunas[t.status].push(t); });
+    
+    Object.keys(colunas).forEach(status => {
+        const divCol = document.getElementById(`coluna-${status.replace(/\s+/g, '-')}`);
+        const qtdCol = document.getElementById(`qtd-${status.toLowerCase().replace(/\s+/g, '-')}`);
+        if(!divCol) return;
+        divCol.innerHTML = '';
+        if(qtdCol) qtdCol.innerText = colunas[status].length;
+        
+        colunas[status].forEach(t => {
+            let corPrioridade = "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300";
+            let dot = "bg-blue-500";
+            if (t.prioridade === 'Alta') { corPrioridade = "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"; dot = "bg-red-500"; }
+            if (t.prioridade === 'Média') { corPrioridade = "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300"; dot = "bg-yellow-500"; }
+            
+            const dataStr = new Date(t.created_at).toLocaleDateString('pt-BR');
+            const descHtml = parseLinks(t.descricao || '');
+
+            divCol.innerHTML += `
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 cursor-move hover:shadow-md transition-all group" draggable="true" ondragstart="iniciarDrag(event, '${t.id}')">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 ${corPrioridade}"><span class="w-1.5 h-1.5 rounded-full ${dot}"></span> ${t.prioridade}</span>
+                        <button onclick="deletarTarefaKanban('${t.id}')" class="text-gray-400 hover:text-red-500 admin-only opacity-0 group-hover:opacity-100 transition-opacity">🗑️</button>
+                    </div>
+                    <h4 class="font-bold text-gray-800 dark:text-white text-sm mb-1">${t.titulo}</h4>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mb-3 whitespace-pre-wrap">${descHtml}</div>
+                    <div class="text-[9px] text-gray-400 font-bold text-right border-t border-gray-100 dark:border-gray-700 pt-2 mt-2">${dataStr}</div>
+                </div>
+            `;
+        });
+    });
+    aplicarPermissoes(); // Garante que o ícone de lixeira só apareça pro ADMIN
+}
+
+function iniciarDrag(e, id) { e.dataTransfer.setData('text/plain', id); }
+function permitirDrop(e) { e.preventDefault(); }
+async function soltarCartao(e, novoStatus) {
+    e.preventDefault();
+    const id = e.dataTransfer.getData('text/plain');
+    const index = tarefasKanban.findIndex(t => t.id === id);
+    if (index > -1 && tarefasKanban[index].status !== novoStatus) {
+        tarefasKanban[index].status = novoStatus;
+        renderKanban(); 
+        await db.from('kanban').update({ status: novoStatus }).eq('id', id);
+    }
+}
+
+async function deletarTarefaKanban(id) {
+    if(localStorage.getItem('app_auth_nivel') !== 'ADMIN') return;
+    if(!confirm("Excluir tarefa?")) return;
+    try {
+        await db.from('kanban').delete().eq('id', id);
+        await buscarKanban();
+        showToast("Tarefa removida", "success");
+    } catch(e) {}
+}
+
+async function carregarDadosIniciais() { mostrarLoading("Sincronizando DB..."); try { const [sR, uR] = await Promise.all([ db.from('custos_sku').select('*'), db.from('usuarios').select('*') ]); if (sR.data) { catalogoSkusGlobais = sR.data.map(s => ({ SKU: s.sku, PRODUTO: s.produto, CUSTO_ANTERIOR: s.custo_anterior, CUSTO_ATUAL: s.custo_atual, CUSTO_MEDIO: s.custo_medio, FORNECEDOR: s.fornecedor, DATA_ATUALIZACAO: s.data_atualizacao, STATUS: s.status })); parseSkusDictionary(); renderPaginaSkus(1); } if (uR.data) { usuariosGlobais = uR.data.map(u => ({ usuario: u.usuario, nome: u.nome, nivel: u.nivel, originalIndex: u.id })); renderTabelaUsuarios(); } await buscarVendasServidor(); await buscarKanban(); const ind = document.getElementById('statusConexao'), txt = document.getElementById('textoConexao'); if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText = `Online`; } catch (e) { showToast("Falha na sincronização: " + (e.message || e), "error"); } finally { esconderLoading(); } }
 
 function aplicarFiltrosLocais() { const fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas'); const o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : ""; vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b) || String(v.status).toLowerCase().includes(b)); if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro); atualizarCardsPainel(vendasFiltradasGlobal); atualizarGrafico(vendasFiltradasGlobal); carregarFiltroAnalise(); paginaAtualVendas=1; renderPaginaVendas(1); }
-
 function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
 
 function renderPaginaVendas(p) { const tp=Math.ceil(vendasFiltradasGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualVendas=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaVendas'); if(tb) tb.innerHTML=''; const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA); if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="13" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; } i.forEach(v => { let isAuto = v.nVenda.includes('MANUAL-') || v.nVenda.includes('AUTO-') || v.nVenda.includes('SYS-'); let display_nv = isAuto ? 'Lançamento' : (v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda); const l = v.urlPlataforma ? `<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${display_nv} ↗</a>` : display_nv; const sLow = String(v.status).toLowerCase(); let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'); let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold"); const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 text-xs text-gray-500">${String(v.mes).substring(0,3)}/${v.ano}</td><td class="p-4 font-mono text-[10px] font-bold text-gray-400">${v.sku || '-'}</td><td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td><td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td><td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td><td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td><td class="p-4 text-right text-orange-500 font-semibold">${formatMoney(v.imposto)}</td><td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td><td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td><td class="p-4 text-right ${corMargem}">${(v.porcentagem || 0).toFixed(2)}%</td><td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="abrirModalEditarVenda('${v.originalIndex}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; if(tb) tb.appendChild(tr); }); const lblP = document.getElementById('lblPaginaVendas'); if(lblP) lblP.innerText=paginaAtualVendas; const lblT = document.getElementById('lblTotalPaginasVendas'); if(lblT) lblT.innerText=tp; const btnP = document.getElementById('btnPrevVendas'); if(btnP) btnP.disabled=paginaAtualVendas===1; const btnN = document.getElementById('btnNextVendas'); if(btnN) btnN.disabled=paginaAtualVendas===tp; }
 
-function switchTab(id) { ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise'].forEach(t => { const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); if(el) el.classList.add('hidden'); if(bt) bt.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float " + (['usuarios','novo','skus','analise'].includes(t)?'admin-only':''); }); const selTab = document.getElementById('tab-'+id); if(selTab) selTab.classList.remove('hidden'); const selBtn = document.getElementById('btn-tab-'+id); if(selBtn) selBtn.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float " + (['usuarios','novo','skus','analise'].includes(id)?'admin-only':''); aplicarPermissoes(); }
+function switchTab(id) { ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise', 'kanban'].forEach(t => { const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); if(el) el.classList.add('hidden'); if(bt) bt.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float " + (['usuarios','novo','skus','analise'].includes(t)?'admin-only':''); }); const selTab = document.getElementById('tab-'+id); if(selTab) selTab.classList.remove('hidden'); const selBtn = document.getElementById('btn-tab-'+id); if(selBtn) selBtn.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float " + (['usuarios','novo','skus','analise'].includes(id)?'admin-only':''); aplicarPermissoes(); }
 function toggleGrafico() { const gc = document.getElementById('graficoContainer'); if(gc) gc.classList.toggle('hidden'); }
 function salvarRascunhoForm() { const d = {}; document.querySelectorAll('.form-draft').forEach(el => d[el.id] = el.value); localStorage.setItem('vendaDraft', JSON.stringify(d)); }
 function carregarRascunhoForm() { const d = localStorage.getItem('vendaDraft'); if (d) try { const o = JSON.parse(d); Object.keys(o).forEach(id => { const el = document.getElementById(id); if(el) el.value = o[id]; }); calcularMargemForm(); } catch(e){} }
