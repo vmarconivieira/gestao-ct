@@ -17,9 +17,6 @@ let skusParaImportarGlobal = [];
 
 let debounceBuscaTimer = null; 
 
-// ==========================================
-// FUNÇÕES GLOBAIS E FERRAMENTAS
-// ==========================================
 function fixText(s) { 
     if(!s || typeof s !== 'string') return s; 
     try { return decodeURIComponent(escape(s)); } 
@@ -59,9 +56,6 @@ const universalNumberParse = (val) => {
     return neg ? -Math.abs(parseFloat(s)||0) : Math.abs(parseFloat(s)||0);
 };
 
-// ==========================================
-// INICIALIZAÇÃO DO SISTEMA E LOGIN
-// ==========================================
 function aplicarPermissoes() {
     const nivel = localStorage.getItem('app_auth_nivel') || 'OPERADOR';
     document.querySelectorAll('.admin-only').forEach(el => { el.style.display = (nivel !== 'ADMIN') ? 'none' : ''; });
@@ -184,6 +178,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value;
             let original_nv = nv || `MANUAL-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
             const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${original_nv}/detalhe`:'');
+            
+            // Aqui mantemos a lógica manual onde taxa unitária é um valor fixo, apenas pro formulário rápido
             const t=q*v, s=t-(q*i), lu=s-(q*c);
             const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:original_nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
             try { 
@@ -201,9 +197,6 @@ function fecharModalSenha() { const m = document.getElementById('modalSenha'); i
 function abrirModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.remove('hidden'); const da = document.getElementById('delMesAno'); if(da) da.value = new Date().getFullYear(); }
 function fecharModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.add('hidden'); }
 
-// ==========================================
-// BUSCA DINÂMICA E RENDERIZAÇÃO (SERVER-SIDE)
-// ==========================================
 function acionarBuscaDinamica() {
     clearTimeout(debounceBuscaTimer);
     debounceBuscaTimer = setTimeout(() => {
@@ -265,7 +258,7 @@ function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
 function renderPaginaVendas(p) {
     const tp=Math.ceil(vendasFiltradasGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualVendas=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaVendas'); if(tb) tb.innerHTML='';
     const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA);
-    if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="12" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
+    if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="13" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
     i.forEach(v => {
         let isAuto = v.nVenda.includes('MANUAL-') || v.nVenda.includes('AUTO-') || v.nVenda.includes('SYS-');
         let display_nv = isAuto ? 'Lançamento' : (v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda);
@@ -285,6 +278,7 @@ function renderPaginaVendas(p) {
             <td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td>
             <td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td>
             <td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td>
+            <td class="p-4 text-right text-orange-500 font-semibold">${formatMoney(v.imposto)}</td>
             <td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td>
             <td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td>
             <td class="p-4 text-right ${corMargem}">${(v.porcentagem || 0).toFixed(2)}%</td>
@@ -300,9 +294,6 @@ function renderPaginaVendas(p) {
 
 async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN')return; if(!confirm("Apagar?"))return; mostrarLoading("Apagando..."); try { await db.from('vendas').delete().eq('id',id); await buscarVendasServidor(); showToast("Excluído!","success"); } catch(e){} finally{esconderLoading();} }
 
-// ==========================================
-// INTERFACE: DASHBOARD E CALCULADORA
-// ==========================================
 function switchTab(id) {
     ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise'].forEach(t => { 
         const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); 
@@ -389,9 +380,6 @@ function calcularSimuladores() {
 }
 function limparSimulador() { ['calcVenda','calcCusto','calcImposto','calcComissao','calcFrete','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
 
-// ==========================================
-// MOTOR DE IMPORTAÇÃO DE LOTE
-// ==========================================
 function iniciarImportacao(e) {
     const f=e.target.files[0]; if(!f) return; mostrarLoading("Analisando Vendas...");
     lerPlanilha(f, (w) => {
@@ -506,10 +494,21 @@ function renderPreviewImportacao() {
     for(let r of importDataGlobal) {
         if(!r[cDesc]) continue;
         let md=mG, ad=aG; if(cData&&r[cData]){ const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;} }
-        let rp=cVen?universalNumberParse(r[cVen]):0, to=cTot?universalNumberParse(r[cTot]):0, es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0, q=Number(r[cQtd])||1, sk=r[cSku]||"", ds=r[cDesc]||"N/A", st=cstEl&&cstEl.value?r[cstEl.value]||"Concluído":"Concluído";
-        let canc=(cTot&&(es<0||to<=0))||(!cTot&&(st.toLowerCase().includes('canc')||rp<=0)), trep=cTot?to:rp, imp=rp*(impG/100), cst=(window.custosMapeadosLote[ds]||0)*q;
-        if(canc){rp=0;imp=0;cst=0;} let sob=trep-imp, luc=sob-cst;
-        tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"><td class="p-3 text-xs font-bold text-gray-500">${md.substring(0,3)}/${ad}</td><td class="p-3 font-mono text-[10px] font-bold text-gray-400">${sk || '-'}</td><td class="p-3 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${ds}">${ds}</td><td class="p-3 text-center font-bold text-indigo-600">${q}</td><td class="p-3 text-right text-blue-600 dark:text-blue-400 font-bold">${formatMoney(rp)}</td><td class="p-3 text-right text-orange-500 font-semibold">${formatMoney(imp)}</td><td class="p-3 text-right text-red-500 font-semibold">${formatMoney(cst)}</td><td class="p-3 text-right font-extrabold ${luc >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(luc)}</td></tr>`;
+        let rp_raw = cVen ? universalNumberParse(r[cVen]) : 0;
+        let isUnitario = cVen && String(cVen).toLowerCase().includes('unit');
+        let q = Number(r[cQtd]) || 1;
+        let bruto = isUnitario ? (rp_raw * q) : rp_raw;
+        let repasse = cTot ? universalNumberParse(r[cTot]) : 0;
+        
+        let es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0, sk=r[cSku]||"", ds=r[cDesc]||"N/A", st=cstEl&&cstEl.value?r[cstEl.value]||"Concluído":"Concluído";
+        let imp = bruto * (impG / 100);
+        let cst = (window.custosMapeadosLote[ds] || 0) * q;
+        
+        let canc=(cTot&&(es<0||repasse<=0))||(!cTot&&(st.toLowerCase().includes('canc')||bruto<=0));
+        if(canc){ bruto = 0; imp = 0; cst = 0; repasse = 0; } 
+        let luc = repasse - imp - cst;
+        
+        tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"><td class="p-3 text-xs font-bold text-gray-500">${md.substring(0,3)}/${ad}</td><td class="p-3 font-mono text-[10px] font-bold text-gray-400">${sk || '-'}</td><td class="p-3 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${ds}">${ds}</td><td class="p-3 text-center font-bold text-indigo-600">${q}</td><td class="p-3 text-right text-blue-600 dark:text-blue-400 font-bold">${formatMoney(bruto)}</td><td class="p-3 text-right text-gray-600 font-semibold">${formatMoney(repasse)}</td><td class="p-3 text-right text-orange-500 font-semibold">${formatMoney(imp)}</td><td class="p-3 text-right text-red-500 font-semibold">${formatMoney(cst)}</td><td class="p-3 text-right font-extrabold ${luc >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(luc)}</td></tr>`;
         count++; if(count >= 3) break;
     }
     if(count > 0) container.classList.remove('hidden'); else container.classList.add('hidden');
@@ -583,8 +582,14 @@ async function processarEnvioEmLote() {
             if(ex){md=ex.mes;ad=ex.ano;}
         }
         
-        let rp=cVen?universalNumberParse(r[cVen]):0, to=cTot?universalNumberParse(r[cTot]):0, es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0;
-        let q=Number(r[cQtd])||1, sk=(cSku&&r[cSku])?String(r[cSku]).trim():"", ds=r[cDesc]?String(r[cDesc]).trim():"N/A", st=cSt&&r[cSt]?r[cSt]:"Concluído";
+        let rp_raw = cVen ? universalNumberParse(r[cVen]) : 0;
+        let isUnitario = cVen && String(cVen).toLowerCase().includes('unit');
+        let q = Number(r[cQtd]) || 1;
+        let bruto = isUnitario ? (rp_raw * q) : rp_raw;
+        let repasse = cTot ? universalNumberParse(r[cTot]) : 0;
+        
+        let es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0;
+        let sk=(cSku&&r[cSku])?String(r[cSku]).trim():"", ds=r[cDesc]?String(r[cDesc]).trim():"N/A", st=cSt&&r[cSt]?r[cSt]:"Concluído";
         
         let original_nv = (cNv && r[cNv]) ? String(r[cNv]).trim() : `MANUAL-${Math.random().toString(36).substr(2, 6).toUpperCase()}-${Date.now().toString().slice(-4)}`;
         
@@ -597,9 +602,13 @@ async function processarEnvioEmLote() {
         let unit_cost = window.custosMapeadosLote[ds] || 0;
         let cst = unit_cost * q;
         
-        let canc=(cTot&&(es<0||to<=0))||(!cTot&&(st.toLowerCase().includes('canc')||rp<=0));
-        let trep=cTot?to:rp, imp=rp*(impG/100);
-        if(canc){rp=0;imp=0;cst=0;} let sob=trep-imp, luc=sob-cst, mar=rp>0?luc/rp:0;
+        let imp = bruto * (impG / 100);
+        let canc=(cTot&&(es<0||repasse<=0))||(!cTot&&(st.toLowerCase().includes('canc')||bruto<=0));
+        
+        if(canc){ bruto = 0; imp = 0; cst = 0; repasse = 0; } 
+        
+        let luc = repasse - imp - cst; 
+        let mar = bruto > 0 ? (luc / bruto) : 0;
         
         let finalSku = sk || ds.toUpperCase();
         if (allowSaveSkus && unit_cost > 0 && !skuTrackSet.has(finalSku)) {
@@ -619,7 +628,7 @@ async function processarEnvioEmLote() {
             if(exv) qA++; else qN++;
         }
         
-        mapVendas[key] = { ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: nv_banco, plataforma: pG, url_ml: urlML, valor_venda: rp, sobra: sob, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es };
+        mapVendas[key] = { ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: nv_banco, plataforma: pG, url_ml: urlML, valor_venda: bruto, sobra: repasse, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es };
     }
     
     let b = Object.values(mapVendas);
@@ -681,43 +690,6 @@ async function confirmarImportacaoSkus() {
     const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.add('hidden'); mostrarLoading("Sincronizando no Supabase...");
     try { const { error } = await db.from('custos_sku').upsert(skusParaImportarGlobal, {onConflict:'sku'}); if(error) throw new Error(error.message); await carregarDadosIniciais(); showToast(skusParaImportarGlobal.length + " SKUs importados com sucesso!", "success"); skusParaImportarGlobal = []; } 
     catch(e) { showToast(e.message, "error"); } finally { esconderLoading(); }
-}
-
-// ==========================================
-// RENDERIZAÇÃO DE SKUS E USUÁRIOS
-// ==========================================
-function renderPaginaSkus(p) {
-    const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; 
-    skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b));
-    const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML='';
-    skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => {
-        let isActive = String(s.STATUS).trim().toUpperCase() !== "INATIVO";
-        let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400";
-        const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors";
-        tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; 
-        if(tb) tb.appendChild(tr);
-    });
-    const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; 
-    const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp;
-    const btnP = document.getElementById('btnPrevSkus'); if(btnP) btnP.disabled=paginaAtualSkus===1; 
-    const btnN = document.getElementById('btnNextSkus'); if(btnN) btnN.disabled=paginaAtualSkus===tp;
-}
-
-function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
-
-function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
-
-async function deletarSku(skuCode) { 
-    if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; 
-    if(!confirm(`Tem certeza que deseja apagar o produto SKU: ${skuCode}?`)) return; 
-    mostrarLoading("Apagando SKU..."); 
-    try { await db.from('custos_sku').delete().eq('sku', skuCode); await carregarDadosIniciais(); showToast("SKU Excluído!","success"); } 
-    catch(e) { showToast("Erro ao excluir", "error"); } finally { esconderLoading(); } 
-}
-
-const formSku = document.getElementById('formCadastroSku');
-if(formSku) {
-    formSku.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await db.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value, produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, custo_medio:document.getElementById('skuForm_custoMedio').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosIniciais(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} });
 }
 
 function renderTabelaUsuarios() {
