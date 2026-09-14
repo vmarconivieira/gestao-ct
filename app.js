@@ -38,6 +38,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    const formAltSenha = document.getElementById('formAlterarSenha');
+    if(formAltSenha) formAltSenha.addEventListener('submit', async function(e) { /* A lógica está no auth.js */ });
+    
+    const formExcMes = document.getElementById('formExcluirMes');
+    if(formExcMes) formExcMes.addEventListener('submit', async function(e) { /* A lógica está no auth.js */ });
 });
 
 // COMPONENTES DE INTERFACE E CÁLCULOS
@@ -143,8 +149,13 @@ function calcularSimuladores() {
 
 function limparSimulador() { ['calcVenda','calcCusto','calcImposto','calcComissao','calcFrete','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
 
+function abrirModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.remove('hidden'); const f = document.getElementById('formAlterarSenha'); if(f) f.reset(); }
+function fecharModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.add('hidden'); }
+function abrirModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.remove('hidden'); const da = document.getElementById('delMesAno'); if(da) da.value = new Date().getFullYear(); }
+function fecharModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.add('hidden'); }
+
 // ==========================================
-// FUNÇÕES DE CRUD DE SKUS E EQUIPE (Trazidas de volta)
+// FUNÇÕES DE CRUD DE SKUS E EQUIPE 
 // ==========================================
 function renderPaginaSkus(p) {
     const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; 
