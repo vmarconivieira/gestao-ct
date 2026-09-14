@@ -6,13 +6,16 @@ function iniciarImportacao(e) {
             if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Planilha vazia","error"); }
             let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}}
             
-            // APLICANDO FIXTEXT AOS CABEÇALHOS
-            importHeadersGlobal=rawDataGlobal[ml].map((h,i)=>h?fixText(String(h)).trim():`Vazia_${i}`); 
+            let colSeen = {};
+            importHeadersGlobal = rawDataGlobal[ml].map((h, i) => {
+                let baseName = h ? fixText(String(h)).trim() : `Vazia_${i}`;
+                if(colSeen[baseName]) { colSeen[baseName]++; return `${baseName} ${colSeen[baseName]}`; } else { colSeen[baseName] = 1; return baseName; }
+            }); 
+            
             importDataGlobal=[];
             for(let i=ml+1;i<rawDataGlobal.length;i++){ 
                 let o={}, hd=false; 
                 rawDataGlobal[i].forEach((v,id)=>{ 
-                    // APLICANDO FIXTEXT AS CÉLULAS
                     let val = (typeof v === 'string') ? fixText(v) : v;
                     o[importHeadersGlobal[id]]=val; 
                     if(String(val).trim()!=="") hd=true; 
@@ -78,7 +81,7 @@ function construirInterfaceMapeamento() {
     const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML='';
     [{id:'map_data',l:'Data',s:['Data', 'Data da venda']}, {id:'map_sku',l:'SKU',s:['SKU']}, {id:'map_desc',l:'Descrição',s:['Título', 'Descrição']}, {id:'map_nven',l:'Pedido',s:['N.º', 'Pedido']}, {id:'map_qtd',l:'Qtd',s:['Unidade', 'Qtd']}, {id:'map_status',l:'Status',s:['Estado', 'Status']}, {id:'map_venda',l:'Venda (R$)',s:['Receita por pro', 'Venda', 'Bruto']}, {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por env']}, {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de vend', 'Taxa']}, {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de env', 'Frete']}, {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamento', 'Estorno']}, {id:'map_total',l:'Total (R$)',s:['Total']}].forEach(f => {
         let h=`<div class="flex flex-col bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm"><label class="text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">${f.l}</label><select id="${f.id}" onchange="atualizarMapeamentoDinamico()" class="p-2.5 outline-none text-xs border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"><option value="">-- Ignorar --</option>`;
-        importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${f.s.some(x=>hd.toLowerCase().includes(x.toLowerCase()))?'selected':''}>${hd}</option>`; });
+        importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${f.s.some(x=>hd.toLowerCase() === x.toLowerCase())?'selected':''}>${hd}</option>`; });
         c.innerHTML+=h+'</select></div>';
     }); atualizarMapeamentoDinamico();
 }
@@ -90,43 +93,45 @@ async function processarEnvioEmLote() {
     const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cnvEl=document.getElementById('map_nven'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total');
     const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:'';
     
-    let orderCounts = {};
-    for(let r of importDataGlobal) { if(r[cDesc]) { let nv = r[cNv] || "-"; orderCounts[nv] = (orderCounts[nv] || 0) + 1; } }
-    
-    let mapVendas = {}, orderIndices = {}, qN = 0, qA = 0;
+    let b = [], qN = 0;
     for(let r of importDataGlobal) {
         if(!r[cDesc]) continue;
         let md=mG, ad=aG; if(cData&&r[cData]){const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;}}
-        let rp=cVen?universalNumberParse(r[cVen]):0, to=cTot?universalNumberParse(r[cTot]):0, es=cEs?universalNumberParse(r[cEs]):0;
-        let q=Number(r[cQtd])||1, sk=r[cSku]||"", ds=r[cDesc]||"N/A", original_nv=r[cNv]||"-", st=cSt&&r[cSt]?r[cSt]:"Concluído";
+        let rp=cVen?universalNumberParse(r[cVen]):0, to=cTot?universalNumberParse(r[cTot]):0, es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0;
+        
+        let q=Number(r[cQtd])||1, sk=r[cSku]||"", ds=r[cDesc]||"N/A", st=cSt&&r[cSt]?r[cSt]:"Concluído";
+        
+        // Se o usuário ignorar Nº do Pedido, gera um automático e evita travar no Supabase
+        let original_nv = r[cNv] || `AUTO-${Math.random().toString(36).substr(2, 6).toUpperCase()}-${Date.now().toString().slice(-4)}`;
+        
         let canc=(cTot&&(es<0||to<=0))||(!cTot&&(st.toLowerCase().includes('canc')||rp<=0));
         let trep=cTot?to:rp, imp=rp*(impG/100), cst=(window.custosMapeadosLote[ds]||0)*q;
         if(canc){rp=0;imp=0;cst=0;} let sob=trep-imp, luc=sob-cst, mar=rp>0?luc/rp:0;
         
-        let nv_banco = original_nv;
-        if(orderCounts[original_nv] > 1) {
-            orderIndices[original_nv] = (orderIndices[original_nv] || 0) + 1;
-            nv_banco = `${original_nv}-I${orderIndices[original_nv]}`;
-        }
+        let urlML = (pG === 'Mercado Livre' && r[cNv]) ? `https://www.mercadolivre.com.br/vendas/${original_nv}` : '';
         
-        let exv = vendasGlobais.some(v => v.nVenda === nv_banco && v.plataforma === pG);
-        if(exv) qA++; else qN++;
-        
-        let urlML = pG === 'Mercado Livre' ? `https://www.mercadolivre.com.br/vendas/${original_nv}` : '';
-        
-        mapVendas[`${pG}_${nv_banco}`] = { ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: nv_banco, plataforma: pG, url_ml: urlML, valor_venda: rp, sobra: sob, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es };
+        b.push({ ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: original_nv, plataforma: pG, url_ml: urlML, valor_venda: rp, sobra: sob, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es });
+        qN++;
     }
     
-    let b = Object.values(mapVendas);
     if(b.length>0) {
         try { 
-            const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); if(error) throw error; 
+            // INSERÇÃO DIRETA para abolir a restrição do Supabase de chaves únicas
+            const {error} = await db.from('vendas').insert(b); 
+            if(error) throw error; 
+            
+            let fTotal = 0, lTotal = 0;
+            b.forEach(x => { fTotal += x.valor_venda; lTotal += x.lucro; });
+            
             const rn=document.getElementById('resumoLoteNovos'); if(rn) rn.innerText=qN; 
-            const ra=document.getElementById('resumoLoteAtualizados'); if(ra) ra.innerText=qA; 
+            const ra=document.getElementById('resumoLoteAtualizados'); if(ra) ra.innerText="0 (Inserção Direta)"; 
+            const rf=document.getElementById('resumoLoteFat'); if(rf) rf.innerText=formatMoney(fTotal); 
+            const rl=document.getElementById('resumoLoteLucro'); if(rl) rl.innerText=formatMoney(lTotal); 
+            
             const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); 
             await buscarVendasServidor(); 
             const rm=document.getElementById('modalResumoLote'); if(rm) rm.classList.remove('hidden'); 
-        } catch(e) { showToast("Erro na importação.", "error"); }
+        } catch(e) { showToast("Erro na importação: " + (e.message || "Falha ao enviar."), "error"); }
     } else { showToast("Nenhuma linha válida.", "error"); }
     esconderLoading();
 }
@@ -137,7 +142,6 @@ function importarCsvSkus(e) {
         try {
             const s=w.Sheets[w.SheetNames[0]]; const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""});
             if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados.");
-            // FIXTEXT APLICADO AOS SKUS
             const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase()); 
             const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO"));
             if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido.");
