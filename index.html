@@ -1,29 +1,738 @@
-<!DOCTYPE html><html lang="pt-BR" class="light"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="icon" type="image/png" href="logo.png"><meta name="theme-color" content="#3b82f6"><script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={darkMode:'class'}</script><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><link rel="stylesheet" href="style.css"></head><body class="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 text-gray-800 dark:from-gray-900 dark:via-gray-800 dark:to-slate-900 dark:text-gray-100 min-h-screen p-3 sm:p-5 transition-colors duration-500"><div id="toast-container"></div><div id="globalOverlay" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-[100] transition-all"><div class="loader rounded-full border-4 border-t-4 border-t-blue-500 border-gray-200 h-16 w-16 mb-4 shadow-lg"></div><h2 id="globalOverlayText" class="text-center text-white text-xl font-extrabold animate-pulse">Processando...</h2></div>
-<div id="modalResumoLote" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[150] flex items-center justify-center p-4"><div class="bg-white dark:bg-gray-800 p-5 md:p-6 rounded-3xl shadow-2xl w-full max-w-lg border border-gray-100 dark:border-gray-700 animate-fade-in flex flex-col max-h-[90vh]"><div class="text-center mb-4 shrink-0"><div class="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/50 rounded-full flex items-center justify-center mx-auto mb-3"><span class="text-3xl">🚀</span></div><h3 class="text-xl md:text-2xl font-extrabold dark:text-white">Lote Processado!</h3><p class="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-1">Sincronização com o Supabase concluída.</p></div><div class="overflow-y-auto custom-scrollbar flex-1 pr-1 space-y-4 mb-4"><div class="bg-gray-50 dark:bg-gray-700/50 rounded-2xl p-4 border border-gray-100 dark:border-gray-600 space-y-3"><div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-600 pb-2"><span class="text-sm font-bold text-gray-600 dark:text-gray-300">Registros Importados:</span><span id="resumoLoteNovos" class="text-lg font-extrabold text-blue-600 dark:text-blue-400">0</span></div><div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-600 pb-2"><span class="text-sm font-bold text-gray-600 dark:text-gray-300">Receita Bruta:</span><span id="resumoLoteFat" class="text-lg font-extrabold text-blue-600 dark:text-blue-400">R$ 0,00</span></div><div class="flex justify-between items-center"><span class="text-sm font-bold text-gray-600 dark:text-gray-300">Lucro Projetado:</span><span id="resumoLoteLucro" class="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">R$ 0,00</span></div></div></div><button onclick="fecharModalResumoLote()" class="w-full shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Continuar</button></div></div>
-<div id="modalPreviewSku" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4"><div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-3xl border border-blue-100 dark:border-gray-700 animate-fade-in"><div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-4 mb-4"><h3 class="text-xl font-bold dark:text-white flex items-center gap-2">👀 Pré-visualização de Custos</h3><button onclick="document.getElementById('modalPreviewSku').classList.add('hidden')" class="text-gray-400 hover:text-red-500 text-3xl font-bold transition-colors">&times;</button></div><p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Confira as 3 primeiras linhas encontradas na sua planilha. Se os valores estiverem corretos, confirme a sincronização.</p><div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 custom-scrollbar mb-6"><table class="w-full text-left text-sm whitespace-nowrap"><thead class="text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 uppercase font-bold text-xs"><tr><th class="p-4">Código SKU</th><th class="p-4 w-1/2">Descrição do Produto</th><th class="p-4 text-right">Custo Detectado</th></tr></thead><tbody id="tabelaPreviewSkuData" class="text-gray-700 dark:text-gray-300"></tbody></table></div><div class="flex flex-col sm:flex-row justify-end gap-4"><button onclick="document.getElementById('modalPreviewSku').classList.add('hidden')" class="w-full sm:w-auto px-6 py-3 rounded-full font-bold text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 shadow-sm transition-colors">Cancelar</button><button onclick="confirmarImportacaoSkus()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-8 rounded-full shadow-lg transition-transform hover:-translate-y-1">✅ Sincronizar SKUs</button></div></div></div>
-<div id="modalEditarVenda" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4"><div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-2xl border border-blue-100 dark:border-gray-700 animate-fade-in max-h-[90vh] overflow-y-auto custom-scrollbar"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold dark:text-white flex items-center"><span class="mr-2">✏️</span> Editar Registro</h3><button onclick="fecharModalEditarVenda()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button></div><form id="formEditarVenda" class="grid grid-cols-1 sm:grid-cols-2 gap-4"><input type="hidden" id="edit_id"><div class="sm:col-span-2"><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Descrição do Produto</label><input type="text" id="edit_descricao" readonly class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 outline-none shadow-sm font-bold cursor-not-allowed"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Status</label><input type="text" id="edit_status" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Repasse (Total do ML) R$</label><input type="number" step="0.01" id="edit_repasse" oninput="calcularEditMargem()" class="w-full p-3 mt-1 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-gray-700 text-blue-600 dark:text-blue-400 outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Imposto Calculado R$</label><input type="number" step="0.01" id="edit_imposto" oninput="calcularEditMargem()" class="w-full p-3 mt-1 rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-gray-700 text-orange-600 dark:text-orange-400 outline-none focus:ring-2 focus:ring-orange-500 transition-colors shadow-sm font-bold"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Custo Base R$</label><input type="number" step="0.01" id="edit_custo" oninput="calcularEditMargem()" class="w-full p-3 mt-1 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-gray-700 text-red-600 dark:text-red-400 outline-none focus:ring-2 focus:ring-red-500 transition-colors shadow-sm font-bold"></div><div class="sm:col-span-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 rounded-xl flex justify-between items-center mt-2 shadow-inner"><div class="flex flex-col"><span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lucro Atualizado</span><span class="text-emerald-500 font-extrabold text-2xl" id="edit_lucro_preview">R$ 0,00</span></div><input type="hidden" id="edit_venda_bruta"></div><div class="sm:col-span-2 flex flex-col sm:flex-row justify-end gap-3 mt-4"><button type="button" onclick="fecharModalEditarVenda()" class="w-full sm:w-auto px-6 py-3.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold rounded-xl shadow transition-colors">Cancelar</button><button type="submit" class="w-full sm:w-auto px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg transition-transform hover:-translate-y-1">Salvar Alterações</button></div></form></div></div>
-<div id="modalSenha" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4"><div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-gray-100 dark:border-gray-700"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold dark:text-white flex items-center"><span class="mr-2">🔑</span> Alterar Senha</h3><button onclick="fecharModalSenha()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button></div><form id="formAlterarSenha" class="flex flex-col gap-4"><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Senha Atual</label><input type="password" id="senhaAtual" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Nova Senha</label><input type="password" id="senhaNova" required minlength="4" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Confirmar Nova</label><input type="password" id="senhaNovaConfirma" required minlength="4" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold"></div><button type="submit" class="w-full mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Confirmar</button></form></div></div>
-<div id="modalExcluirMes" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4"><div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-red-100 dark:border-red-900 animate-fade-in"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold dark:text-white flex items-center text-red-600 dark:text-red-400"><span class="mr-2">⚠️</span> Excluir Mês</h3><button onclick="fecharModalExcluirMes()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button></div><p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Esta ação apagará <b>todos</b> os registros do mês. Confirme sua senha.</p><form id="formExcluirMes" class="flex flex-col gap-4"><div class="flex gap-4"><div class="w-1/2"><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Ano</label><input type="number" id="delMesAno" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-red-500 transition-colors shadow-sm font-bold"></div><div class="w-1/2"><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Mês</label><select id="delMesNome" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-red-500 transition-colors shadow-sm font-bold"><option value="JANEIRO">Janeiro</option><option value="FEVEREIRO">Fevereiro</option><option value="MARÇO">Março</option><option value="ABRIL">Abril</option><option value="MAIO">Maio</option><option value="JUNHO">Junho</option><option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option><option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option><option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dezembro</option></select></div></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400">Senha ADMIN</label><input type="password" id="delMesSenha" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-red-600 dark:text-red-400 outline-none focus:ring-2 focus:ring-red-500 transition-colors shadow-sm font-bold"></div><div class="flex gap-3 mt-4"><button type="button" onclick="fecharModalExcluirMes()" class="w-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold py-3.5 rounded-xl shadow transition-colors">Cancelar</button><button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Excluir</button></div></form></div></div>
+<!DOCTYPE html>
+<html lang="pt-BR" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão S&H - Inteligência</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <meta name="theme-color" content="#3b82f6">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 text-gray-800 dark:from-gray-900 dark:via-gray-800 dark:to-slate-900 dark:text-gray-100 min-h-screen p-3 sm:p-5 transition-colors duration-500">
 
-<div id="loginScreen" class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 dark:from-gray-900 dark:via-gray-800 dark:to-slate-900 transition-colors"><div class="glass-panel p-8 md:p-12 rounded-[2rem] shadow-2xl w-full max-w-sm mx-4 flex flex-col items-center animate-fade-in"><div class="h-16 flex items-center justify-center mb-6"><img src="logo.png" alt="S&H Logo" class="h-14 w-auto object-contain"></div> flex items-center justify-center shadow-lg p-2 mb-6 hover-float"><img src="logo.png" alt="S&H Logo" class="w-full h-full object-contain"></div><h1 class="text-3xl font-extrabold text-white mb-2 tracking-tight">Gestão S&H</h1><p class="text-blue-100 dark:text-gray-300 text-sm font-semibold mb-8">Acesse sua conta para continuar</p><form id="formLogin" class="w-full flex flex-col gap-4"><input type="text" id="loginUser" required placeholder="Usuário" class="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none font-semibold focus:ring-2 focus:ring-blue-500 shadow-inner"><input type="password" id="loginPass" required placeholder="Senha" class="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none font-semibold focus:ring-2 focus:ring-blue-500 shadow-inner"><div class="flex items-center justify-center mt-2 mb-1"><span id="loginStatusDot" class="w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"></span><span id="loginStatusText" class="text-xs text-blue-100 dark:text-gray-300 font-semibold tracking-wide">Testando conexão...</span></div><button type="submit" id="btnLogin" disabled class="w-full bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold py-4 rounded-xl shadow-lg hover:-translate-y-1 opacity-50 cursor-not-allowed">Entrar no Sistema</button></form><div id="loginSpinner" class="hidden mt-6 flex flex-col items-center"><div class="loader loader-blue rounded-full border-4 border-t-4 border-white h-8 w-8 mb-2"></div><span class="text-white text-xs font-bold animate-pulse">Autenticando...</span></div></div></div>
+    <div id="toast-container"></div>
 
-<div id="appContent" class="hidden max-w-7xl mx-auto space-y-6">
-<header class="glass-panel p-4 md:p-6 rounded-3xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-4 animate-fade-in"><div class="text-center md:text-left flex items-center gap-3"><div class="h-16 flex items-center justify-center mb-6"><img src="logo.png" alt="S&H Logo" class="h-14 w-auto object-contain"></div> flex items-center justify-center shadow-lg p-2 mb-6 hover-float"><img src="logo.png" alt="S&H Logo" class="w-full h-full object-contain"></div><div><h1 class="text-2xl md:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">Gestão S&H</h1><div class="flex items-center justify-center md:justify-start mt-1"><span id="statusConexao" class="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"></span><span class="text-xs font-semibold text-gray-500 dark:text-gray-400" id="textoConexao">Supabase DB</span><button onclick="carregarDadosIniciais()" class="ml-2 bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded-full w-6 h-6 flex items-center justify-center">🔄</button></div></div></div><div class="flex flex-wrap justify-center items-center gap-2"><div class="flex flex-col items-end mr-2 hidden md:flex"><span id="bemVindoText" class="text-sm font-bold text-gray-700 dark:text-gray-200"></span><span id="nivelText" class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"></span></div><button onclick="toggleDarkMode()" class="bg-white/50 dark:bg-gray-700/50 hover:bg-white font-bold py-2.5 px-4 rounded-full shadow-sm">🌓</button><button onclick="abrirModalSenha()" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 font-bold py-2.5 px-4 rounded-full shadow-sm">🔑</button><button onclick="fazerLogout()" class="bg-red-50 dark:bg-red-900/30 text-red-500 font-bold py-2.5 px-4 rounded-full shadow-sm">🚪 Sair</button></div></header>
+    <!-- OVERLAY DE CARREGAMENTO -->
+    <div id="globalOverlay" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-[100] transition-all">
+        <div class="loader rounded-full border-4 border-t-4 border-t-blue-500 border-gray-200 h-16 w-16 mb-4 shadow-lg"></div>
+        <h2 id="globalOverlayText" class="text-center text-white text-xl font-extrabold animate-pulse">Processando...</h2>
+    </div>
 
-<div class="flex justify-center animate-fade-in"><div class="glass-panel p-2 rounded-3xl inline-flex shadow-sm gap-2 flex-wrap justify-center"><button onclick="switchTab('dashboard')" id="btn-tab-dashboard" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float">📊 Dashboard</button><button onclick="switchTab('analise')" id="btn-tab-analise" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📈 Inteligência</button><button onclick="switchTab('novo')" id="btn-tab-novo" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">✨ Novo Lançamento</button><button onclick="switchTab('calculadora')" id="btn-tab-calculadora" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">🧮 Calculadora</button><button onclick="switchTab('skus')" id="btn-tab-skus" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📦 Custos</button><button onclick="switchTab('usuarios')" id="btn-tab-usuarios" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">👥 Equipe</button></div></div>
+    <!-- MODAL RESUMO DE LOTE -->
+    <div id="modalResumoLote" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 p-5 md:p-6 rounded-3xl shadow-2xl w-full max-w-lg border border-gray-100 dark:border-gray-700 animate-fade-in flex flex-col max-h-[90vh]">
+            <div class="text-center mb-4 shrink-0">
+                <div class="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/50 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <span class="text-3xl">🚀</span>
+                </div>
+                <h3 class="text-xl md:text-2xl font-extrabold dark:text-white">Lote Processado!</h3>
+                <p class="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-1">Sincronização com o Supabase concluída.</p>
+            </div>
+            <div class="overflow-y-auto custom-scrollbar flex-1 pr-1 space-y-4 mb-4">
+                <div class="bg-gray-50 dark:bg-gray-700/50 rounded-2xl p-4 border border-gray-100 dark:border-gray-600 space-y-3">
+                    <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-600 pb-2">
+                        <span class="text-sm font-bold text-gray-600 dark:text-gray-300">Registros Importados:</span>
+                        <span id="resumoLoteNovos" class="text-lg font-extrabold text-blue-600 dark:text-blue-400">0</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-600 pb-2">
+                        <span class="text-sm font-bold text-gray-600 dark:text-gray-300">Receita Bruta:</span>
+                        <span id="resumoLoteFat" class="text-lg font-extrabold text-blue-600 dark:text-blue-400">R$ 0,00</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm font-bold text-gray-600 dark:text-gray-300">Lucro Projetado:</span>
+                        <span id="resumoLoteLucro" class="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">R$ 0,00</span>
+                    </div>
+                </div>
+            </div>
+            <button onclick="fecharModalResumoLote()" class="w-full shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Continuar</button>
+        </div>
+    </div>
 
-<div id="tab-dashboard" class="space-y-6 animate-fade-in"><div class="flex justify-end gap-2 mb-2"><button onclick="toggleGrafico()" class="bg-indigo-100 text-indigo-700 font-bold py-2 px-4 rounded-full text-sm">📉 Gráfico</button><button onclick="exportarRelatorioPNG()" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold py-2 px-4 rounded-full text-sm shadow-sm transition-colors">📤 Compartilhar PNG</button></div><div id="areaExport" class="space-y-6 rounded-3xl"><div class="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6" id="dashboardCards"><div class="p-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl shadow-lg text-white hover-float"><p class="text-blue-100 font-bold text-sm">Faturamento Bruto</p><p id="totalFaturamento" class="text-3xl font-extrabold mt-3">R$ 0,00</p></div><div class="p-6 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-3xl shadow-lg text-white hover-float"><p class="text-emerald-100 font-bold text-sm">Lucro Líquido</p><p id="totalLucro" class="text-3xl font-extrabold mt-3">R$ 0,00</p></div><div class="p-6 bg-gradient-to-br from-purple-500 to-fuchsia-600 rounded-3xl shadow-lg text-white hover-float"><p class="text-purple-100 font-bold text-sm">Margem Global</p><p id="mediaMargem" class="text-3xl font-extrabold mt-3">0.00%</p></div></div><section id="graficoContainer" class="glass-panel p-5 rounded-3xl"><div class="w-full h-64 md:h-80 relative"><canvas id="faturamentoChart"></canvas></div></section></div>
-<section class="glass-panel p-5 sm:p-6 rounded-3xl"><div class="flex flex-col md:flex-row justify-between mb-4 gap-4 items-start md:items-center"><h2 class="text-xl font-extrabold dark:text-white">📚 Histórico</h2><div class="flex flex-col sm:flex-row gap-2 w-full md:w-auto"><input type="text" id="buscaVendas" oninput="acionarBuscaDinamica()" placeholder="Busca Global..." class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"><select id="filtroAno" onchange="document.getElementById('buscaVendas').value=''; buscarVendasServidor()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"><option value="TODOS">Todos os Anos</option><option value="2026">2026</option><option value="2025">2025</option></select><select id="filtroMes" onchange="document.getElementById('buscaVendas').value=''; buscarVendasServidor()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"><option value="TODOS">Todos os Meses</option><option value="JANEIRO">Janeiro</option><option value="FEVEREIRO">Fevereiro</option><option value="MARÇO">Março</option><option value="ABRIL">Abril</option><option value="MAIO">Maio</option><option value="JUNHO">Junho</option><option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option><option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option><option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dezembro</option></select><select id="ordenacao" onchange="aplicarFiltrosLocais()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm font-bold"><option value="recentes">⇅ Recentes</option><option value="margem_alta">↑ Maior Margem</option><option value="lucro_alto">↑ Maior Lucro</option></select></div></div><div class="overflow-x-auto rounded-2xl custom-scrollbar border border-gray-100 dark:border-gray-700"><table class="w-full text-left min-w-[1000px]"><thead class="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase border-b border-gray-100 dark:border-gray-700"><tr><th class="p-4">Período</th><th class="p-4">Cód. Produto</th><th class="p-4 w-1/4">Descrição</th><th class="p-4 text-center">Status</th><th class="p-4 text-center">Canal</th><th class="p-4 text-center">Qtd</th><th class="p-4 text-right">Bruto</th><th class="p-4 text-right">Repasse</th><th class="p-4 text-right">Imposto</th><th class="p-4 text-right">Custo</th><th class="p-4 text-right">Lucro</th><th class="p-4 text-right">Margem</th><th class="p-4 text-center admin-only">Ação</th></tr></thead><tbody id="tabelaVendas" class="text-sm bg-white dark:bg-gray-900/50"></tbody></table></div><div class="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4 border-t border-gray-200 dark:border-gray-700 pt-4"><span class="text-xs font-bold text-gray-500 dark:text-gray-400">Páginas de Histórico</span><div class="flex gap-2 items-center"><button onclick="mudarPaginaVendas(-1)" id="btnPrevVendas" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button><span class="text-sm font-extrabold py-2.5 px-5 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 rounded-xl border border-gray-300 dark:border-gray-700 shadow-inner"><span id="lblPaginaVendas">1</span> <span class="text-gray-400 mx-1">de</span> <span id="lblTotalPaginasVendas">1</span></span><button onclick="mudarPaginaVendas(1)" id="btnNextVendas" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Próximo</button></div></div></section></div>
+    <!-- PREVIEW DE SKUS -->
+    <div id="modalPreviewSku" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-3xl border border-blue-100 dark:border-gray-700 animate-fade-in">
+            <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-4 mb-4">
+                <h3 class="text-xl font-bold dark:text-white flex items-center gap-2">👀 Pré-visualização de Custos</h3>
+                <button onclick="document.getElementById('modalPreviewSku').classList.add('hidden')" class="text-gray-400 hover:text-red-500 text-3xl font-bold transition-colors">&times;</button>
+            </div>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Confira as 3 primeiras linhas encontradas na sua planilha. Se os valores estiverem corretos, confirme a sincronização.</p>
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 custom-scrollbar mb-6">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 uppercase font-bold text-xs">
+                        <tr>
+                            <th class="p-4">Código SKU</th>
+                            <th class="p-4 w-1/2">Descrição do Produto</th>
+                            <th class="p-4 text-right">Custo Detectado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaPreviewSkuData" class="text-gray-700 dark:text-gray-300"></tbody>
+                </table>
+            </div>
+            <div class="flex flex-col sm:flex-row justify-end gap-4">
+                <button onclick="document.getElementById('modalPreviewSku').classList.add('hidden')" class="w-full sm:w-auto px-6 py-3 rounded-full font-bold text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 shadow-sm transition-colors">Cancelar</button>
+                <button onclick="confirmarImportacaoSkus()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-8 rounded-full shadow-lg transition-transform hover:-translate-y-1">✅ Sincronizar SKUs</button>
+            </div>
+        </div>
+    </div>
 
-<section id="tab-analise" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only"><div class="flex flex-col sm:flex-row justify-between mb-6 gap-4"><h2 class="text-xl font-bold dark:text-white">📈 Inteligência</h2><select id="selectAnaliseSku" onchange="renderizarAbaInteligencia()" class="w-full sm:w-1/3 p-3 rounded-2xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-semibold text-sm"><option value="">-- Produto --</option></select></div><div id="containerAnaliseVazia" class="text-center py-16 text-gray-500">Selecione um Produto acima.</div><div id="containerAnaliseDados" class="hidden space-y-6"><div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center"><div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700"><p class="text-xs font-bold text-gray-500">Unidades</p><p id="analiseQtdTotal" class="text-2xl font-extrabold text-blue-600">0</p></div><div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700"><p class="text-xs font-bold text-gray-500">Preço Médio</p><p id="analisePrecoMedio" class="text-2xl font-extrabold dark:text-white">R$ 0,00</p></div><div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700"><p class="text-xs font-bold text-gray-500">Margem Média</p><p id="analiseMargemMedia" class="text-2xl font-extrabold text-purple-600">0.00%</p></div></div><div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700"><div class="w-full h-72 relative"><canvas id="chartAnaliseSku"></canvas></div></div></div></section>
+    <!-- MODAL EDITAR VENDA -->
+    <div id="modalEditarVenda" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-2xl border border-blue-100 dark:border-gray-700 animate-fade-in max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-xl font-bold dark:text-white flex items-center"><span class="mr-2">✏️</span> Editar Registro</h3>
+                <button onclick="fecharModalEditarVenda()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button>
+            </div>
+            <form id="formEditarVenda" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input type="hidden" id="edit_id">
+                <div class="sm:col-span-2">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Descrição do Produto</label>
+                    <input type="text" id="edit_descricao" readonly class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 outline-none shadow-sm font-bold cursor-not-allowed">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Status</label>
+                    <input type="text" id="edit_status" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Repasse (Total do ML) R$</label>
+                    <input type="number" step="0.01" id="edit_repasse" oninput="calcularEditMargem()" class="w-full p-3 mt-1 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-gray-700 text-blue-600 dark:text-blue-400 outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Imposto Calculado R$</label>
+                    <input type="number" step="0.01" id="edit_imposto" oninput="calcularEditMargem()" class="w-full p-3 mt-1 rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-gray-700 text-orange-600 dark:text-orange-400 outline-none focus:ring-2 focus:ring-orange-500 transition-colors shadow-sm font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Custo Base R$</label>
+                    <input type="number" step="0.01" id="edit_custo" oninput="calcularEditMargem()" class="w-full p-3 mt-1 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-gray-700 text-red-600 dark:text-red-400 outline-none focus:ring-2 focus:ring-red-500 transition-colors shadow-sm font-bold">
+                </div>
+                
+                <div class="sm:col-span-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 rounded-xl flex justify-between items-center mt-2 shadow-inner">
+                    <div class="flex flex-col">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lucro Atualizado</span>
+                        <span class="text-emerald-500 font-extrabold text-2xl" id="edit_lucro_preview">R$ 0,00</span>
+                    </div>
+                    <input type="hidden" id="edit_venda_bruta">
+                </div>
+                
+                <div class="sm:col-span-2 flex flex-col sm:flex-row justify-end gap-3 mt-4">
+                    <button type="button" onclick="fecharModalEditarVenda()" class="w-full sm:w-auto px-6 py-3.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold rounded-xl shadow transition-colors">Cancelar</button>
+                    <button type="submit" class="w-full sm:w-auto px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg transition-transform hover:-translate-y-1">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-<section id="tab-novo" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only"><div class="flex flex-col md:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4"><h2 class="text-xl font-bold dark:text-white">📝 Lançar Venda</h2><div class="flex flex-wrap gap-3"><button onclick="abrirModalExcluirMes()" class="text-red-500 bg-red-50 dark:bg-red-900/30 px-4 py-2 rounded-full text-sm font-bold">🗑️ Excluir Mês</button><input type="file" id="fileImportData" class="hidden" accept=".csv, .xlsx, .xls" onchange="iniciarImportacao(event)"><button onclick="document.getElementById('fileImportData').click()" class="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 py-2 px-5 rounded-full text-sm font-bold shadow-sm">📂 Importar Lote</button></div></div><form id="vendaForm" class="grid grid-cols-1 sm:grid-cols-6 gap-4"><div class="flex flex-col sm:col-span-1"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Ano</label><input type="number" id="ano" required class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"></div><div class="flex flex-col sm:col-span-1"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Mês</label><select id="mes" required class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"><option value="JANEIRO">Jan</option><option value="FEVEREIRO">Fev</option><option value="MARÇO">Mar</option><option value="ABRIL">Abril</option><option value="MAIO">Mai</option><option value="JUNHO">Junho</option><option value="JULHO">Julho</option><option value="AGOSTO">Ago</option><option value="SETEMBRO">Set</option><option value="OUTUBRO">Out</option><option value="NOVEMBRO">Nov</option><option value="DEZEMBRO">Dez</option></select></div><div class="flex flex-col sm:col-span-1"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">SKU</label><input type="text" id="sku" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm uppercase font-mono"></div><div class="flex flex-col sm:col-span-3"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Descrição</label><input type="text" id="descricao" required class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"></div><div class="flex flex-col sm:col-span-2"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Plataforma</label><select id="plataforma" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"><option value="Mercado Livre">Mercado Livre</option><option value="Shopee">Shopee</option><option value="Tiktok Shop">Tiktok Shop</option><option value="Magazine Luiza">Magazine Luiza</option><option value="Outros">Outros</option></select></div><div class="flex flex-col sm:col-span-2"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Nº Venda</label><input type="text" id="nVenda" required class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"></div><div class="flex flex-col sm:col-span-2"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Link</label><input type="url" id="urlPlataforma" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"></div><div class="flex flex-col sm:col-span-1"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Qtd</label><input type="number" id="quantidade" required min="1" oninput="calcularMargemForm()" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm text-center font-bold"></div><div class="flex flex-col sm:col-span-2"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Venda Un.</label><input type="number" id="valorUnitario" required step="0.01" oninput="calcularMargemForm()" class="form-draft w-full p-3 rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-gray-700 text-green-700 dark:text-green-400 outline-none focus:ring-2 focus:ring-green-500 transition-all shadow-sm font-bold"></div><div class="flex flex-col sm:col-span-1"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Taxa Un.</label><input type="number" id="imposto" step="0.01" oninput="calcularMargemForm()" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-orange-600 dark:text-orange-400 outline-none focus:ring-2 focus:ring-orange-500 transition-all shadow-sm font-bold"></div><div class="flex flex-col sm:col-span-2"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Un.</label><input type="number" id="custo" required step="0.01" oninput="calcularMargemForm()" class="form-draft w-full p-3 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-gray-700 text-red-600 dark:text-red-400 outline-none focus:ring-2 focus:ring-red-500 transition-all shadow-sm font-bold"></div><div class="sm:col-span-6 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 rounded-3xl flex flex-col md:flex-row justify-between items-center mt-2 shadow-sm gap-6"><div class="flex flex-wrap justify-center gap-6 sm:gap-8 w-full md:w-auto"><div class="text-center"><span class="text-xs font-bold text-gray-500">Repasse</span><div id="previewSobra" class="font-extrabold text-2xl dark:text-white">R$ 0,00</div></div><div class="text-center border-l border-gray-200 dark:border-gray-600 pl-6"><span class="text-xs font-bold text-gray-500">Lucro</span><div id="previewLucro" class="font-extrabold text-2xl text-emerald-500">R$ 0,00</div></div><div class="text-center border-l border-gray-200 dark:border-gray-600 pl-6"><span class="text-xs font-bold text-gray-500">Margem</span><div id="previewMargem" class="font-extrabold text-2xl text-purple-500">0.00%</div></div></div><div class="flex gap-4 w-full md:w-auto justify-center"><button type="button" onclick="limparRascunho()" class="text-sm font-bold text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors px-2">Limpar</button><button type="submit" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold py-3 px-8 rounded-full shadow-lg transition-transform hover:-translate-y-1">Salvar Lançamento</button></div></div></form></section>
+    <!-- MODAIS DE SENHA E EXCLUSÃO -->
+    <div id="modalSenha" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-gray-100 dark:border-gray-700">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-xl font-bold dark:text-white flex items-center"><span class="mr-2">🔑</span> Alterar Senha</h3>
+                <button onclick="fecharModalSenha()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button>
+            </div>
+            <form id="formAlterarSenha" class="flex flex-col gap-4">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Senha Atual</label>
+                    <input type="password" id="senhaAtual" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Nova Senha</label>
+                    <input type="password" id="senhaNova" required minlength="4" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Confirmar Nova</label>
+                    <input type="password" id="senhaNovaConfirma" required minlength="4" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
+                </div>
+                <button type="submit" class="w-full mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Confirmar</button>
+            </form>
+        </div>
+    </div>
 
-<section id="tab-skus" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only"><div class="flex flex-col sm:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4"><h2 class="text-xl font-bold dark:text-white">📦 Catálogo de SKUs</h2><div><input type="file" id="fileImportSkuCsv" class="hidden" accept=".csv" onchange="importarCsvSkus(event)"><button onclick="document.getElementById('fileImportSkuCsv').click()" class="w-full sm:w-auto bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 py-2.5 px-6 rounded-full text-sm font-bold shadow-sm">⬆️ Importar CSV</button></div></div><form id="formCadastroSku" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 rounded-2xl mb-8"><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="col-span-1 lg:col-span-1"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">SKU</label><input type="text" id="skuForm_sku" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 uppercase font-mono shadow-sm"></div><div class="col-span-1 sm:col-span-2 lg:col-span-3"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Produto</label><input type="text" id="skuForm_produto" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Atual</label><input type="number" id="skuForm_custoAtual" step="0.01" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-red-500 outline-none focus:ring-2 focus:ring-red-500 font-bold shadow-sm"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Médio</label><input type="number" id="skuForm_custoMedio" step="0.01" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Fornecedor</label><input type="text" id="skuForm_fornecedor" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Status</label><select id="skuForm_status" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold"><option value="Ativo">Ativo</option><option value="Inativo">Inativo</option></select></div></div><div class="flex flex-col sm:flex-row justify-end gap-3 mt-5"><button type="button" onclick="document.getElementById('formCadastroSku').reset()" class="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 shadow-sm transition-colors">Limpar Campos</button><button type="submit" class="w-full sm:w-auto bg-blue-600 text-white font-extrabold py-3 px-8 rounded-xl hover:bg-blue-700 transition-colors shadow">Salvar SKU</button></div></form><input type="text" id="buscaSkus" oninput="renderPaginaSkus(1)" placeholder="Buscar SKU..." class="w-full p-3 mb-4 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"><div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700"><table class="w-full text-left bg-white dark:bg-gray-800"><thead class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700"><tr><th class="p-4">SKU</th><th class="p-4">Produto</th><th class="p-4 text-right">Atual</th><th class="p-4 text-center">Status</th><th class="p-4 text-center">Ações</th></tr></thead><tbody id="tabelaSkus" class="text-sm"></tbody></table></div><div class="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4 border-t border-gray-200 dark:border-gray-700 pt-4"><span class="text-xs font-bold text-gray-500 dark:text-gray-400">Páginas de Produtos</span><div class="flex gap-2 items-center"><button onclick="mudarPaginaSkus(-1)" id="btnPrevSkus" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button><span class="text-sm font-extrabold py-2.5 px-5 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 rounded-xl border border-gray-300 dark:border-gray-700 shadow-inner"><span id="lblPaginaSkus">1</span> <span class="text-gray-400 mx-1">de</span> <span id="lblTotalPaginasSkus">1</span></span><button onclick="mudarPaginaSkus(1)" id="btnNextSkus" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Próximo</button></div></div></section>
+    <div id="modalExcluirMes" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-red-100 dark:border-red-900 animate-fade-in">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-xl font-bold dark:text-white flex items-center text-red-600 dark:text-red-400"><span class="mr-2">⚠️</span> Excluir Mês</h3>
+                <button onclick="fecharModalExcluirMes()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button>
+            </div>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Esta ação apagará <b>todos</b> os registros do mês. Confirme sua senha.</p>
+            <form id="formExcluirMes" class="flex flex-col gap-4">
+                <div class="flex gap-4">
+                    <div class="w-1/2">
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Ano</label>
+                        <input type="number" id="delMesAno" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-red-500 transition-colors shadow-sm font-bold">
+                    </div>
+                    <div class="w-1/2">
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Mês</label>
+                        <select id="delMesNome" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-red-500 transition-colors shadow-sm font-bold">
+                            <option value="JANEIRO">Janeiro</option>
+                            <option value="FEVEREIRO">Fevereiro</option>
+                            <option value="MARÇO">Março</option>
+                            <option value="ABRIL">Abril</option>
+                            <option value="MAIO">Maio</option>
+                            <option value="JUNHO">Junho</option>
+                            <option value="JULHO">Julho</option>
+                            <option value="AGOSTO">Agosto</option>
+                            <option value="SETEMBRO">Setembro</option>
+                            <option value="OUTUBRO">Outubro</option>
+                            <option value="NOVEMBRO">Novembro</option>
+                            <option value="DEZEMBRO">Dezembro</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Senha ADMIN</label>
+                    <input type="password" id="delMesSenha" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-red-600 dark:text-red-400 outline-none focus:ring-2 focus:ring-red-500 transition-colors shadow-sm font-bold">
+                </div>
+                <div class="flex gap-3 mt-4">
+                    <button type="button" onclick="fecharModalExcluirMes()" class="w-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold py-3.5 rounded-xl shadow transition-colors">Cancelar</button>
+                    <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Excluir</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-<section id="tab-calculadora" class="hidden glass-panel p-5 md:p-8 rounded-3xl"><div class="flex flex-col sm:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4"><h2 class="text-xl font-bold dark:text-white">🧮 Simulador</h2><button onclick="limparSimulador()" class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-2 px-6 rounded-full text-sm font-bold shadow-sm">Limpar Todos</button></div><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Base (R$)</label><input type="number" id="calcCusto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-red-500 outline-none focus:ring-2 focus:ring-red-500 font-bold shadow-sm"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Imposto (%)</label><input type="number" id="calcImposto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Comissão (%)</label><input type="number" id="calcComissao" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Frete Fixo (R$)</label><input type="number" id="calcFrete" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold"></div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-blue-50 dark:bg-gray-800 p-6 rounded-3xl border border-blue-100 dark:border-gray-700 shadow-sm"><h4 class="font-extrabold text-blue-800 dark:text-blue-400 mb-4 text-lg">Vender por (R$):</h4><input type="number" id="calcVenda" step="0.01" oninput="calcularSimuladores()" class="w-full p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 font-extrabold text-xl outline-none focus:ring-2 focus:ring-blue-500 mb-6 shadow-inner"><div class="flex justify-between bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm"><div class="flex flex-col"><span class="text-[10px] font-bold text-gray-400 uppercase">Lucro</span><span class="text-emerald-500 font-extrabold text-2xl" id="simLucro1">R$ 0,00</span></div><div class="flex flex-col text-right"><span class="text-[10px] font-bold text-gray-400 uppercase">Margem</span><span class="text-purple-500 font-extrabold text-2xl" id="simMargem1">0.00%</span></div></div></div><div class="bg-emerald-50 dark:bg-gray-800 p-6 rounded-3xl border border-emerald-100 dark:border-gray-700 shadow-sm"><h4 class="font-extrabold text-emerald-800 dark:text-emerald-400 mb-4 text-lg">Quero Margem (%):</h4><input type="number" id="calcMargemAlvo" step="0.01" oninput="calcularSimuladores()" class="w-full p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-gray-900 text-emerald-600 dark:text-emerald-400 font-extrabold text-xl outline-none focus:ring-2 focus:ring-emerald-500 mb-6 shadow-inner"><div class="flex justify-between bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm"><div class="flex flex-col"><span class="text-[10px] font-bold text-gray-400 uppercase">Lucro Proj.</span><span class="text-emerald-500 font-extrabold text-2xl" id="simLucro2">R$ 0,00</span></div><div class="flex flex-col text-right"><span class="text-[10px] font-bold text-gray-400 uppercase">Preço</span><span class="font-extrabold text-2xl dark:text-white" id="simPreco2">R$ 0,00</span></div></div></div></div></section>
+    <!-- TELA DE LOGIN -->
+    <div id="loginScreen" class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 dark:from-gray-900 dark:via-gray-800 dark:to-slate-900 transition-colors">
+        <div class="glass-panel p-8 md:p-12 rounded-[2rem] shadow-2xl w-full max-w-sm mx-4 flex flex-col items-center animate-fade-in">
+            <div class="h-16 flex items-center justify-center mb-6">
+                <img src="logo.png" alt="S&H Logo" class="h-14 w-auto object-contain">
+            </div>
+            <h1 class="text-3xl font-extrabold text-white mb-2 tracking-tight">Gestão S&H</h1>
+            <p class="text-blue-100 dark:text-gray-300 text-sm font-semibold mb-8">Acesse sua conta para continuar</p>
+            <form id="formLogin" class="w-full flex flex-col gap-4">
+                <input type="text" id="loginUser" required placeholder="Usuário" class="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none font-semibold focus:ring-2 focus:ring-blue-500 shadow-inner">
+                <input type="password" id="loginPass" required placeholder="Senha" class="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none font-semibold focus:ring-2 focus:ring-blue-500 shadow-inner">
+                <div class="flex items-center justify-center mt-2 mb-1">
+                    <span id="loginStatusDot" class="w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"></span>
+                    <span id="loginStatusText" class="text-xs text-blue-100 dark:text-gray-300 font-semibold tracking-wide">Testando conexão...</span>
+                </div>
+                <button type="submit" id="btnLogin" disabled class="w-full bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold py-4 rounded-xl shadow-lg hover:-translate-y-1 opacity-50 cursor-not-allowed">Entrar no Sistema</button>
+            </form>
+            <div id="loginSpinner" class="hidden mt-6 flex flex-col items-center">
+                <div class="loader loader-blue rounded-full border-4 border-t-4 border-white h-8 w-8 mb-2"></div>
+                <span class="text-white text-xs font-bold animate-pulse">Autenticando...</span>
+            </div>
+        </div>
+    </div>
 
-<section id="tab-usuarios" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only"><h2 class="text-xl font-bold dark:text-white mb-6 border-b border-gray-200 dark:border-gray-700 pb-4">👥 Gerenciar Equipe</h2><form id="formCadastroUser" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl mb-8 flex flex-col md:flex-row gap-4 items-end w-full"><div class="w-full md:w-1/4"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Login</label><input type="text" id="userForm_user" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 lowercase font-mono shadow-sm"></div><div class="w-full md:w-1/4"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Nome</label><input type="text" id="userForm_nome" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"></div><div class="w-full md:w-1/4"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Senha (vazio para manter)</label><input type="password" id="userForm_senha" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold"></div><div class="w-full md:w-1/4"><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Nível</label><select id="userForm_nivel" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold"><option value="OPERADOR">Operador</option><option value="ADMIN">Admin</option></select></div><button type="submit" class="w-full md:w-auto bg-blue-600 text-white font-extrabold py-3 px-8 rounded-xl hover:bg-blue-700 transition-colors shadow">Salvar</button></form><div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700"><table class="w-full text-left bg-white dark:bg-gray-800"><thead class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700"><tr><th class="p-4">Login</th><th class="p-4">Nome</th><th class="p-4 text-center">Nível</th><th class="p-4 text-center">Ações</th></tr></thead><tbody id="tabelaUsuarios" class="text-sm"></tbody></table></div></section>
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div id="appContent" class="hidden max-w-7xl mx-auto space-y-6">
+        <header class="glass-panel p-4 md:p-6 rounded-3xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-4 animate-fade-in">
+            <div class="text-center md:text-left flex items-center gap-3">
+                <div class="h-12 flex items-center justify-center">
+                    <img src="logo.png" alt="S&H" class="h-10 w-auto object-contain">
+                </div>
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">Gestão S&H</h1>
+                    <div class="flex items-center justify-center md:justify-start mt-1">
+                        <span id="statusConexao" class="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"></span>
+                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400" id="textoConexao">Supabase DB</span>
+                        <button onclick="carregarDadosIniciais()" class="ml-2 bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded-full w-6 h-6 flex items-center justify-center">🔄</button>
+                    </div>
+                </div>
+            </div>
+            <div class="flex flex-wrap justify-center items-center gap-2">
+                <div class="flex flex-col items-end mr-2 hidden md:flex">
+                    <span id="bemVindoText" class="text-sm font-bold text-gray-700 dark:text-gray-200"></span>
+                    <span id="nivelText" class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"></span>
+                </div>
+                <button onclick="toggleDarkMode()" class="bg-white/50 dark:bg-gray-700/50 hover:bg-white font-bold py-2.5 px-4 rounded-full shadow-sm">🌓</button>
+                <button onclick="abrirModalSenha()" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 font-bold py-2.5 px-4 rounded-full shadow-sm">🔑</button>
+                <button onclick="fazerLogout()" class="bg-red-50 dark:bg-red-900/30 text-red-500 font-bold py-2.5 px-4 rounded-full shadow-sm">🚪 Sair</button>
+            </div>
+        </header>
 
-<div id="modalMapeamento" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-5xl max-h-[95vh] overflow-y-auto custom-scrollbar"><div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-4 mb-4"><h3 class="text-2xl font-bold dark:text-white">Mapear Colunas</h3><button onclick="fecharModalMapeamento()" class="text-gray-400 hover:text-red-500 text-3xl font-bold transition-colors">&times;</button></div><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 my-6 bg-blue-50 dark:bg-blue-900/20 p-5 rounded-2xl border border-blue-100 dark:border-gray-700 shadow-inner relative"><div id="indDataAutomatica" class="hidden absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg rounded-tr-2xl shadow-sm z-10">Data Automática da Planilha Ativa</div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Plataforma</label><select id="globalPlataforma" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold"><option value="Mercado Livre">Mercado Livre</option><option value="Shopee">Shopee</option><option value="Direto">Direto</option></select></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Ano</label><input type="number" id="globalAno" oninput="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800"></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Mês</label><select id="globalMes" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800"><option value="JANEIRO">Jan</option><option value="FEVEREIRO">Fev</option><option value="MARÇO">Mar</option><option value="ABRIL">Abril</option><option value="MAIO">Mai</option><option value="JUNHO">Junho</option><option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option><option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option><option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dez</option></select></div><div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Imposto Padrão (%)</label><input type="number" id="globalImposto" oninput="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold"></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6" id="mapeamentoContainer"></div><div id="areaCustosDinamicos" class="hidden bg-gray-50 dark:bg-gray-800/50 p-5 rounded-2xl mb-6 border border-gray-200 dark:border-gray-700 shadow-inner"><h4 class="font-bold dark:text-white text-sm mb-3">Estes SKUs não possuem custo cadastrado:</h4><div id="listaCustosProdutos" class="flex flex-col gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-2"></div></div><div id="areaPreviewImportacao" class="hidden flex flex-col gap-3 mt-6 bg-white dark:bg-gray-800 p-5 rounded-2xl border border-blue-200 dark:border-gray-700 shadow-inner"><h4 class="font-extrabold text-blue-600 dark:text-blue-400 text-sm flex items-center gap-2">👀 Pré-visualização ao vivo <span class="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 px-2 py-0.5 rounded-full font-bold">Lendo 3 primeiras linhas...</span></h4><div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 custom-scrollbar"><table class="w-full text-left text-xs whitespace-nowrap"><thead class="text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 uppercase font-bold"><tr><th class="p-3">Data</th><th class="p-3">SKU</th><th class="p-3 w-1/3">Produto</th><th class="p-3 text-center">Qtd</th><th class="p-3 text-right">Bruto</th><th class="p-3 text-right">Repasse</th><th class="p-3 text-right">Imposto</th><th class="p-3 text-right">Custo</th><th class="p-3 text-right">Lucro Líq.</th></tr></thead><tbody id="tabelaPreviewImportacao" class="text-gray-700 dark:text-gray-300"></tbody></table></div></div><div class="flex flex-col sm:flex-row justify-end gap-4 mt-8"><button onclick="fecharModalMapeamento()" class="w-full sm:w-auto px-8 py-3 rounded-full font-bold text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 shadow-sm transition-colors">Cancelar</button><button onclick="processarEnvioEmLote()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 px-10 rounded-full transition-transform hover:-translate-y-1 shadow-lg">🚀 Sincronizar Lote</button></div></div></div></div>
-<script src="app.js" defer></script></body></html>
+        <!-- BARRA DE ABAS -->
+        <div class="flex justify-center animate-fade-in">
+            <div class="glass-panel p-2 rounded-3xl inline-flex shadow-sm gap-2 flex-wrap justify-center">
+                <button onclick="switchTab('dashboard')" id="btn-tab-dashboard" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float">📊 Dashboard</button>
+                <button onclick="switchTab('analise')" id="btn-tab-analise" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📈 Inteligência</button>
+                <button onclick="switchTab('novo')" id="btn-tab-novo" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">✨ Novo Lançamento</button>
+                <button onclick="switchTab('calculadora')" id="btn-tab-calculadora" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">🧮 Calculadora</button>
+                <button onclick="switchTab('skus')" id="btn-tab-skus" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📦 Custos</button>
+                <button onclick="switchTab('usuarios')" id="btn-tab-usuarios" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">👥 Equipe</button>
+            </div>
+        </div>
+		<!-- ABA 1: DASHBOARD -->
+        <div id="tab-dashboard" class="space-y-6 animate-fade-in">
+            <div class="flex justify-end gap-2 mb-2">
+                <button onclick="toggleGrafico()" class="bg-indigo-100 text-indigo-700 font-bold py-2 px-4 rounded-full text-sm">📉 Gráfico</button>
+                <button onclick="exportarRelatorioPNG()" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold py-2 px-4 rounded-full text-sm shadow-sm transition-colors">📤 Compartilhar PNG</button>
+            </div>
+            <div id="areaExport" class="space-y-6 rounded-3xl">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6" id="dashboardCards">
+                    <div class="p-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl shadow-lg text-white hover-float">
+                        <p class="text-blue-100 font-bold text-sm">Faturamento Bruto</p>
+                        <p id="totalFaturamento" class="text-3xl font-extrabold mt-3">R$ 0,00</p>
+                    </div>
+                    <div class="p-6 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-3xl shadow-lg text-white hover-float">
+                        <p class="text-emerald-100 font-bold text-sm">Lucro Líquido</p>
+                        <p id="totalLucro" class="text-3xl font-extrabold mt-3">R$ 0,00</p>
+                    </div>
+                    <div class="p-6 bg-gradient-to-br from-purple-500 to-fuchsia-600 rounded-3xl shadow-lg text-white hover-float">
+                        <p class="text-purple-100 font-bold text-sm">Margem Global</p>
+                        <p id="mediaMargem" class="text-3xl font-extrabold mt-3">0.00%</p>
+                    </div>
+                </div>
+                <section id="graficoContainer" class="glass-panel p-5 rounded-3xl">
+                    <div class="w-full h-64 md:h-80 relative">
+                        <canvas id="faturamentoChart"></canvas>
+                    </div>
+                </section>
+            </div>
+            
+            <section class="glass-panel p-5 sm:p-6 rounded-3xl">
+                <div class="flex flex-col md:flex-row justify-between mb-4 gap-4 items-start md:items-center">
+                    <h2 class="text-xl font-extrabold dark:text-white">📚 Histórico</h2>
+                    <div class="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                        <input type="text" id="buscaVendas" oninput="acionarBuscaDinamica()" placeholder="Busca Global..." class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                        <select id="filtroAno" onchange="document.getElementById('buscaVendas').value=''; buscarVendasServidor()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                            <option value="TODOS">Todos os Anos</option>
+                            <option value="2026">2026</option>
+                            <option value="2025">2025</option>
+                        </select>
+                        <select id="filtroMes" onchange="document.getElementById('buscaVendas').value=''; buscarVendasServidor()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                            <option value="TODOS">Todos os Meses</option>
+                            <option value="JANEIRO">Janeiro</option>
+                            <option value="FEVEREIRO">Fevereiro</option>
+                            <option value="MARÇO">Março</option>
+                            <option value="ABRIL">Abril</option>
+                            <option value="MAIO">Maio</option>
+                            <option value="JUNHO">Junho</option>
+                            <option value="JULHO">Julho</option>
+                            <option value="AGOSTO">Agosto</option>
+                            <option value="SETEMBRO">Setembro</option>
+                            <option value="OUTUBRO">Outubro</option>
+                            <option value="NOVEMBRO">Novembro</option>
+                            <option value="DEZEMBRO">Dezembro</option>
+                        </select>
+                        <select id="ordenacao" onchange="aplicarFiltrosLocais()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm font-bold">
+                            <option value="recentes">⇅ Recentes</option>
+                            <option value="margem_alta">↑ Maior Margem</option>
+                            <option value="lucro_alto">↑ Maior Lucro</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="overflow-x-auto rounded-2xl custom-scrollbar border border-gray-100 dark:border-gray-700">
+                    <table class="w-full text-left min-w-[1000px]">
+                        <thead class="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase border-b border-gray-100 dark:border-gray-700">
+                            <tr>
+                                <th class="p-4">Período</th>
+                                <th class="p-4">Cód. Produto</th>
+                                <th class="p-4 w-1/4">Descrição</th>
+                                <th class="p-4 text-center">Status</th>
+                                <th class="p-4 text-center">Canal</th>
+                                <th class="p-4 text-center">Qtd</th>
+                                <th class="p-4 text-right">Bruto</th>
+                                <th class="p-4 text-right">Repasse</th>
+                                <th class="p-4 text-right">Imposto</th>
+                                <th class="p-4 text-right">Custo</th>
+                                <th class="p-4 text-right">Lucro</th>
+                                <th class="p-4 text-right">Margem</th>
+                                <th class="p-4 text-center admin-only">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaVendas" class="text-sm bg-white dark:bg-gray-900/50"></tbody>
+                    </table>
+                </div>
+                
+                <div class="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <span class="text-xs font-bold text-gray-500 dark:text-gray-400">Páginas de Histórico</span>
+                    <div class="flex gap-2 items-center">
+                        <button onclick="mudarPaginaVendas(-1)" id="btnPrevVendas" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
+                        <span class="text-sm font-extrabold py-2.5 px-5 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 rounded-xl border border-gray-300 dark:border-gray-700 shadow-inner"><span id="lblPaginaVendas">1</span> <span class="text-gray-400 mx-1">de</span> <span id="lblTotalPaginasVendas">1</span></span>
+                        <button onclick="mudarPaginaVendas(1)" id="btnNextVendas" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Próximo</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ABA INTELIGÊNCIA -->
+        <section id="tab-analise" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only">
+            <div class="flex flex-col sm:flex-row justify-between mb-6 gap-4">
+                <h2 class="text-xl font-bold dark:text-white">📈 Inteligência</h2>
+                <select id="selectAnaliseSku" onchange="renderizarAbaInteligencia()" class="w-full sm:w-1/3 p-3 rounded-2xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-semibold text-sm">
+                    <option value="">-- Produto --</option>
+                </select>
+            </div>
+            <div id="containerAnaliseVazia" class="text-center py-16 text-gray-500">Selecione um Produto acima.</div>
+            <div id="containerAnaliseDados" class="hidden space-y-6">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500">Unidades</p>
+                        <p id="analiseQtdTotal" class="text-2xl font-extrabold text-blue-600">0</p>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500">Preço Médio</p>
+                        <p id="analisePrecoMedio" class="text-2xl font-extrabold dark:text-white">R$ 0,00</p>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500">Margem Média</p>
+                        <p id="analiseMargemMedia" class="text-2xl font-extrabold text-purple-600">0.00%</p>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700">
+                    <div class="w-full h-72 relative">
+                        <canvas id="chartAnaliseSku"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ABA NOVO LANÇAMENTO -->
+        <section id="tab-novo" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only">
+            <div class="flex flex-col md:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4">
+                <h2 class="text-xl font-bold dark:text-white">📝 Lançar Venda</h2>
+                <div class="flex flex-wrap gap-3">
+                    <button onclick="abrirModalExcluirMes()" class="text-red-500 bg-red-50 dark:bg-red-900/30 px-4 py-2 rounded-full text-sm font-bold">🗑️ Excluir Mês</button>
+                    <input type="file" id="fileImportData" class="hidden" accept=".csv, .xlsx, .xls" onchange="iniciarImportacao(event)">
+                    <button onclick="document.getElementById('fileImportData').click()" class="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 py-2 px-5 rounded-full text-sm font-bold shadow-sm">📂 Importar Lote</button>
+                </div>
+            </div>
+            <form id="vendaForm" class="grid grid-cols-1 sm:grid-cols-6 gap-4">
+                <div class="flex flex-col sm:col-span-1">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Ano</label>
+                    <input type="number" id="ano" required class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                </div>
+                <div class="flex flex-col sm:col-span-1">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Mês</label>
+                    <select id="mes" required class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                        <option value="JANEIRO">Jan</option>
+                        <option value="FEVEREIRO">Fev</option>
+                        <option value="MARÇO">Mar</option>
+                        <option value="ABRIL">Abril</option>
+                        <option value="MAIO">Mai</option>
+                        <option value="JUNHO">Junho</option>
+                        <option value="JULHO">Julho</option>
+                        <option value="AGOSTO">Ago</option>
+                        <option value="SETEMBRO">Set</option>
+                        <option value="OUTUBRO">Out</option>
+                        <option value="NOVEMBRO">Nov</option>
+                        <option value="DEZEMBRO">Dez</option>
+                    </select>
+                </div>
+                <div class="flex flex-col sm:col-span-1">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">SKU</label>
+                    <input type="text" id="sku" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm uppercase font-mono">
+                </div>
+                <div class="flex flex-col sm:col-span-3">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Descrição</label>
+                    <input type="text" id="descricao" required class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                </div>
+                
+                <div class="flex flex-col sm:col-span-2">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Plataforma</label>
+                    <select id="plataforma" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                        <option value="Mercado Livre">Mercado Livre</option>
+                        <option value="Shopee">Shopee</option>
+                        <option value="Tiktok Shop">Tiktok Shop</option>
+                        <option value="Magazine Luiza">Magazine Luiza</option>
+                        <option value="Outros">Outros</option>
+                    </select>
+                </div>
+                <div class="flex flex-col sm:col-span-2">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Nº Venda</label>
+                    <input type="text" id="nVenda" required class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                </div>
+                <div class="flex flex-col sm:col-span-2">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Link</label>
+                    <input type="url" id="urlPlataforma" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                </div>
+                
+                <div class="flex flex-col sm:col-span-1">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Qtd</label>
+                    <input type="number" id="quantidade" required min="1" oninput="calcularMargemForm()" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm text-center font-bold">
+                </div>
+                <div class="flex flex-col sm:col-span-2">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Venda Un.</label>
+                    <input type="number" id="valorUnitario" required step="0.01" oninput="calcularMargemForm()" class="form-draft w-full p-3 rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-gray-700 text-green-700 dark:text-green-400 outline-none focus:ring-2 focus:ring-green-500 transition-all shadow-sm font-bold">
+                </div>
+                <div class="flex flex-col sm:col-span-1">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Taxa Un.</label>
+                    <input type="number" id="imposto" step="0.01" oninput="calcularMargemForm()" class="form-draft w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-orange-600 dark:text-orange-400 outline-none focus:ring-2 focus:ring-orange-500 transition-all shadow-sm font-bold">
+                </div>
+                <div class="flex flex-col sm:col-span-2">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Un.</label>
+                    <input type="number" id="custo" required step="0.01" oninput="calcularMargemForm()" class="form-draft w-full p-3 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-gray-700 text-red-600 dark:text-red-400 outline-none focus:ring-2 focus:ring-red-500 transition-all shadow-sm font-bold">
+                </div>
+                
+                <div class="sm:col-span-6 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 rounded-3xl flex flex-col md:flex-row justify-between items-center mt-2 shadow-sm gap-6">
+                    <div class="flex flex-wrap justify-center gap-6 sm:gap-8 w-full md:w-auto">
+                        <div class="text-center">
+                            <span class="text-xs font-bold text-gray-500">Repasse</span>
+                            <div id="previewSobra" class="font-extrabold text-2xl dark:text-white">R$ 0,00</div>
+                        </div>
+                        <div class="text-center border-l border-gray-200 dark:border-gray-600 pl-6">
+                            <span class="text-xs font-bold text-gray-500">Lucro</span>
+                            <div id="previewLucro" class="font-extrabold text-2xl text-emerald-500">R$ 0,00</div>
+                        </div>
+                        <div class="text-center border-l border-gray-200 dark:border-gray-600 pl-6">
+                            <span class="text-xs font-bold text-gray-500">Margem</span>
+                            <div id="previewMargem" class="font-extrabold text-2xl text-purple-500">0.00%</div>
+                        </div>
+                    </div>
+                    <div class="flex gap-4 w-full md:w-auto justify-center">
+                        <button type="button" onclick="limparRascunho()" class="text-sm font-bold text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors px-2">Limpar</button>
+                        <button type="submit" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold py-3 px-8 rounded-full shadow-lg transition-transform hover:-translate-y-1">Salvar Lançamento</button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        <!-- ABA SKUS -->
+        <section id="tab-skus" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only">
+            <div class="flex flex-col sm:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4">
+                <h2 class="text-xl font-bold dark:text-white">📦 Catálogo de SKUs</h2>
+                <div>
+                    <input type="file" id="fileImportSkuCsv" class="hidden" accept=".csv" onchange="importarCsvSkus(event)">
+                    <button onclick="document.getElementById('fileImportSkuCsv').click()" class="w-full sm:w-auto bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 py-2.5 px-6 rounded-full text-sm font-bold shadow-sm">⬆️ Importar CSV</button>
+                </div>
+            </div>
+            
+            <form id="formCadastroSku" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 rounded-2xl mb-8">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="col-span-1 lg:col-span-1">
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">SKU</label>
+                        <input type="text" id="skuForm_sku" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 uppercase font-mono shadow-sm">
+                    </div>
+                    <div class="col-span-1 sm:col-span-2 lg:col-span-3">
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Produto</label>
+                        <input type="text" id="skuForm_produto" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Atual</label>
+                        <input type="number" id="skuForm_custoAtual" step="0.01" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-red-500 outline-none focus:ring-2 focus:ring-red-500 font-bold shadow-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Médio</label>
+                        <input type="number" id="skuForm_custoMedio" step="0.01" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Fornecedor</label>
+                        <input type="text" id="skuForm_fornecedor" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Status</label>
+                        <select id="skuForm_status" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                            <option value="Ativo">Ativo</option>
+                            <option value="Inativo">Inativo</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex flex-col sm:flex-row justify-end gap-3 mt-5">
+                    <button type="button" onclick="document.getElementById('formCadastroSku').reset()" class="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 shadow-sm transition-colors">Limpar Campos</button>
+                    <button type="submit" class="w-full sm:w-auto bg-blue-600 text-white font-extrabold py-3 px-8 rounded-xl hover:bg-blue-700 transition-colors shadow">Salvar SKU</button>
+                </div>
+            </form>
+            
+            <input type="text" id="buscaSkus" oninput="renderPaginaSkus(1)" placeholder="Buscar SKU..." class="w-full p-3 mb-4 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                <table class="w-full text-left bg-white dark:bg-gray-800">
+                    <thead class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                        <tr>
+                            <th class="p-4">SKU</th>
+                            <th class="p-4">Produto</th>
+                            <th class="p-4 text-right">Atual</th>
+                            <th class="p-4 text-center">Status</th>
+                            <th class="p-4 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaSkus" class="text-sm"></tbody>
+                </table>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                <span class="text-xs font-bold text-gray-500 dark:text-gray-400">Páginas de Produtos</span>
+                <div class="flex gap-2 items-center">
+                    <button onclick="mudarPaginaSkus(-1)" id="btnPrevSkus" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
+                    <span class="text-sm font-extrabold py-2.5 px-5 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 rounded-xl border border-gray-300 dark:border-gray-700 shadow-inner"><span id="lblPaginaSkus">1</span> <span class="text-gray-400 mx-1">de</span> <span id="lblTotalPaginasSkus">1</span></span>
+                    <button onclick="mudarPaginaSkus(1)" id="btnNextSkus" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Próximo</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ABA CALCULADORA -->
+        <section id="tab-calculadora" class="hidden glass-panel p-5 md:p-8 rounded-3xl">
+            <div class="flex flex-col sm:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4">
+                <h2 class="text-xl font-bold dark:text-white">🧮 Simulador</h2>
+                <button onclick="limparSimulador()" class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-2 px-6 rounded-full text-sm font-bold shadow-sm">Limpar Todos</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Base (R$)</label>
+                    <input type="number" id="calcCusto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-red-500 outline-none focus:ring-2 focus:ring-red-500 font-bold shadow-sm">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Imposto (%)</label>
+                    <input type="number" id="calcImposto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Comissão (%)</label>
+                    <input type="number" id="calcComissao" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Frete Fixo (R$)</label>
+                    <input type="number" id="calcFrete" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-blue-50 dark:bg-gray-800 p-6 rounded-3xl border border-blue-100 dark:border-gray-700 shadow-sm">
+                    <h4 class="font-extrabold text-blue-800 dark:text-blue-400 mb-4 text-lg">Vender por (R$):</h4>
+                    <input type="number" id="calcVenda" step="0.01" oninput="calcularSimuladores()" class="w-full p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 font-extrabold text-xl outline-none focus:ring-2 focus:ring-blue-500 mb-6 shadow-inner">
+                    <div class="flex justify-between bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Lucro</span>
+                            <span class="text-emerald-500 font-extrabold text-2xl" id="simLucro1">R$ 0,00</span>
+                        </div>
+                        <div class="flex flex-col text-right">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Margem</span>
+                            <span class="text-purple-500 font-extrabold text-2xl" id="simMargem1">0.00%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-emerald-50 dark:bg-gray-800 p-6 rounded-3xl border border-emerald-100 dark:border-gray-700 shadow-sm">
+                    <h4 class="font-extrabold text-emerald-800 dark:text-emerald-400 mb-4 text-lg">Quero Margem (%):</h4>
+                    <input type="number" id="calcMargemAlvo" step="0.01" oninput="calcularSimuladores()" class="w-full p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-gray-900 text-emerald-600 dark:text-emerald-400 font-extrabold text-xl outline-none focus:ring-2 focus:ring-emerald-500 mb-6 shadow-inner">
+                    <div class="flex justify-between bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Lucro Proj.</span>
+                            <span class="text-emerald-500 font-extrabold text-2xl" id="simLucro2">R$ 0,00</span>
+                        </div>
+                        <div class="flex flex-col text-right">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Preço</span>
+                            <span class="font-extrabold text-2xl dark:text-white" id="simPreco2">R$ 0,00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ABA USUÁRIOS -->
+        <section id="tab-usuarios" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only">
+            <h2 class="text-xl font-bold dark:text-white mb-6 border-b border-gray-200 dark:border-gray-700 pb-4">👥 Gerenciar Equipe</h2>
+            <form id="formCadastroUser" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl mb-8 flex flex-col md:flex-row gap-4 items-end w-full">
+                <div class="w-full md:w-1/4">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Login</label>
+                    <input type="text" id="userForm_user" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 lowercase font-mono shadow-sm">
+                </div>
+                <div class="w-full md:w-1/4">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Nome</label>
+                    <input type="text" id="userForm_nome" required class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
+                </div>
+                <div class="w-full md:w-1/4">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Senha (vazio para manter)</label>
+                    <input type="password" id="userForm_senha" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div class="w-full md:w-1/4">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Nível</label>
+                    <select id="userForm_nivel" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                        <option value="OPERADOR">Operador</option>
+                        <option value="ADMIN">Admin</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full md:w-auto bg-blue-600 text-white font-extrabold py-3 px-8 rounded-xl hover:bg-blue-700 transition-colors shadow">Salvar</button>
+            </form>
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                <table class="w-full text-left bg-white dark:bg-gray-800">
+                    <thead class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                        <tr>
+                            <th class="p-4">Login</th>
+                            <th class="p-4">Nome</th>
+                            <th class="p-4 text-center">Nível</th>
+                            <th class="p-4 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaUsuarios" class="text-sm"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- MODAL IMPORTAÇÃO -->
+        <div id="modalMapeamento" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-5xl max-h-[95vh] overflow-y-auto custom-scrollbar">
+                <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-4 mb-4">
+                    <h3 class="text-2xl font-bold dark:text-white">Mapear Colunas</h3>
+                    <button onclick="fecharModalMapeamento()" class="text-gray-400 hover:text-red-500 text-3xl font-bold transition-colors">&times;</button>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 my-6 bg-blue-50 dark:bg-blue-900/20 p-5 rounded-2xl border border-blue-100 dark:border-gray-700 shadow-inner relative">
+                    <div id="indDataAutomatica" class="hidden absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg rounded-tr-2xl shadow-sm z-10">Data Automática da Planilha Ativa</div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Plataforma</label>
+                        <select id="globalPlataforma" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold">
+                            <option value="Mercado Livre">Mercado Livre</option>
+                            <option value="Shopee">Shopee</option>
+                            <option value="Direto">Direto</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Ano</label>
+                        <input type="number" id="globalAno" oninput="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Mês</label>
+                        <select id="globalMes" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800">
+                            <option value="JANEIRO">Jan</option>
+                            <option value="FEVEREIRO">Fev</option>
+                            <option value="MARÇO">Mar</option>
+                            <option value="ABRIL">Abril</option>
+                            <option value="MAIO">Mai</option>
+                            <option value="JUNHO">Junho</option>
+                            <option value="JULHO">Julho</option>
+                            <option value="AGOSTO">Ago</option>
+                            <option value="SETEMBRO">Set</option>
+                            <option value="OUTUBRO">Out</option>
+                            <option value="NOVEMBRO">Nov</option>
+                            <option value="DEZEMBRO">Dez</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Imposto Padrão (%)</label>
+                        <input type="number" id="globalImposto" oninput="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6" id="mapeamentoContainer"></div>
+                
+                <div id="areaCustosDinamicos" class="hidden bg-gray-50 dark:bg-gray-800/50 p-5 rounded-2xl mb-6 border border-gray-200 dark:border-gray-700 shadow-inner">
+                    <h4 class="font-bold dark:text-white text-sm mb-3">Estes SKUs não possuem custo cadastrado:</h4>
+                    <div id="listaCustosProdutos" class="flex flex-col gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-2"></div>
+                </div>
+
+                <div id="areaPreviewImportacao" class="hidden flex flex-col gap-3 mt-6 bg-white dark:bg-gray-800 p-5 rounded-2xl border border-blue-200 dark:border-gray-700 shadow-inner">
+                    <h4 class="font-extrabold text-blue-600 dark:text-blue-400 text-sm flex items-center gap-2">👀 Pré-visualização ao vivo <span class="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 px-2 py-0.5 rounded-full font-bold">Lendo 3 primeiras linhas...</span></h4>
+                    <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 custom-scrollbar">
+                        <table class="w-full text-left text-xs whitespace-nowrap">
+                            <thead class="text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 uppercase font-bold">
+                                <tr>
+                                    <th class="p-3">Data</th>
+                                    <th class="p-3">SKU</th>
+                                    <th class="p-3 w-1/3">Produto</th>
+                                    <th class="p-3 text-center">Qtd</th>
+                                    <th class="p-3 text-right">Bruto</th>
+                                    <th class="p-3 text-right">Repasse</th>
+                                    <th class="p-3 text-right">Imposto</th>
+                                    <th class="p-3 text-right">Custo</th>
+                                    <th class="p-3 text-right">Lucro Líq.</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelaPreviewImportacao" class="text-gray-700 dark:text-gray-300"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col sm:flex-row justify-end gap-4 mt-8">
+                    <button onclick="fecharModalMapeamento()" class="w-full sm:w-auto px-8 py-3 rounded-full font-bold text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 shadow-sm transition-colors">Cancelar</button>
+                    <button onclick="processarEnvioEmLote()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 px-10 rounded-full transition-transform hover:-translate-y-1 shadow-lg">🚀 Sincronizar Lote</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js" defer></script>
+</body>
+</html>
