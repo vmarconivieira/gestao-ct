@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', ha);
                 if (data && data.length > 0) { const hn = await hashSHA256(sn); await db.from('usuarios').update({ senha: hn }).eq('usuario', u); localStorage.setItem('app_auth_token', hn); showToast("Senha alterada!", 'success'); fecharModalSenha(); }
                 else showToast("Senha atual incorreta.", 'error');
-            } catch (err) { showToast("Erro.", "error"); } finally { esconderLoading(); }
+            } catch (err) { showToast("Erro: " + err.message, "error"); } finally { esconderLoading(); }
         });
     }
 
@@ -224,8 +224,8 @@ async function buscarVendasServidor() {
         let q = db.from('vendas').select('*').order('created_at', { ascending: false });
         
         if (busca !== "") {
-            // Busca Global expandida: inclui Status
-            q = q.or(`n_venda.ilike.%${busca}%,sku.ilike.%${busca}%,descricao.ilike.%${busca}%,status.ilike.%${busca}%`);
+            // Correção: Uso de '*' como coringa oficial do PostgREST para evitar erro de URI malformada com '%'
+            q = q.or(`n_venda.ilike.*${busca}*,sku.ilike.*${busca}*,descricao.ilike.*${busca}*,status.ilike.*${busca}*`);
         } else {
             if (ano !== "TODOS") q = q.eq('ano', ano);
             if (mes !== "TODOS") q = q.ilike('mes', mes);
@@ -236,7 +236,7 @@ async function buscarVendasServidor() {
         
         vendasGlobais = (data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes).toUpperCase(), qtd: v.quantidade, descricao: v.descricao, sku: v.sku, nVenda: v.n_venda, urlPlataforma: v.url_ml, plataforma: v.plataforma, valorVenda: Number(v.valor_venda), sobra: Number(v.sobra), imposto: Number(v.imposto), custo: Number(v.custo), lucro: Number(v.lucro), porcentagem: Number(v.porcentagem)*100, status: v.status }));
         aplicarFiltrosLocais();
-    } catch (e) { showToast("Erro ao buscar vendas.", "error"); } finally { esconderLoading(); }
+    } catch (e) { showToast("Erro ao buscar vendas: " + (e.message || e), "error"); } finally { esconderLoading(); }
 }
 
 async function carregarDadosIniciais() {
@@ -248,14 +248,13 @@ async function carregarDadosIniciais() {
         await buscarVendasServidor();
         const ind = document.getElementById('statusConexao'), txt = document.getElementById('textoConexao');
         if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText = `Online`; 
-    } catch (e) { showToast("Falha na sincronização", "error"); } finally { esconderLoading(); }
+    } catch (e) { showToast("Falha na sincronização: " + (e.message || e), "error"); } finally { esconderLoading(); }
 }
 
 function aplicarFiltrosLocais() {
     const fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas');
     const o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : "";
     
-    // Adicionado filtro de status na busca rápida
     vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b) || String(v.status).toLowerCase().includes(b));
     
     if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro);
