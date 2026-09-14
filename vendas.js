@@ -1,4 +1,4 @@
-// Server-Side Pagination: Busca apenas os filtros selecionados (economiza banda)
+// Server-Side Fetching
 async function buscarVendasServidor() {
     const fA = document.getElementById('filtroAno'); const fM = document.getElementById('filtroMes');
     const ano = fA ? fA.value : new Date().getFullYear().toString(); 
@@ -45,8 +45,8 @@ function renderPaginaVendas(p) {
     const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA);
     if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="11" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; }
     i.forEach(v => {
-        let original_nv = v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda; 
-        const l=v.urlPlataforma?`<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${original_nv} ↗</a>`:original_nv;
+        let original_nv = v.nVenda; 
+        const l=v.urlPlataforma?`<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${original_nv.includes('AUTO') ? 'Link' : original_nv} ↗</a>`: (original_nv.includes('AUTO') ? '-' : original_nv);
         const sLow = v.status.toLowerCase();
         let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300');
         let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold");
@@ -61,18 +61,50 @@ function renderPaginaVendas(p) {
     const btnN = document.getElementById('btnNextVendas'); if(btnN) btnN.disabled=paginaAtualVendas===tp;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const vendaF = document.getElementById('vendaForm');
-    if(vendaF) {
-        vendaF.addEventListener('submit', async function(e) {
-            e.preventDefault(); mostrarLoading("Salvando...");
-            const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value;
-            const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${nv}`:'');
-            const t=q*v, s=t-(q*i), lu=s-(q*c);
-            const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
-            try { const { error } = await db.from('vendas').upsert(p, {onConflict:'plataforma,n_venda'}); if(error) throw error; limparRascunho(); await buscarVendasServidor(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(e){showToast("Erro", "error");} finally {esconderLoading();}
-        });
-    }
-});
+const vendaF = document.getElementById('vendaForm');
+if(vendaF) {
+    vendaF.addEventListener('submit', async function(e) {
+        e.preventDefault(); mostrarLoading("Salvando...");
+        const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value;
+        
+        let original_nv = nv || `AUTO-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+        const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${original_nv}`:'');
+        
+        const t=q*v, s=t-(q*i), lu=s-(q*c);
+        const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:original_nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 };
+        try { 
+            // Mudado para INSERÇÃO DIRETA para evitar o erro de Constraint do Supabase
+            const { error } = await db.from('vendas').insert([p]); 
+            if(error) throw error; 
+            limparRascunho(); await buscarVendasServidor(); switchTab('dashboard'); showToast('Salvo!', 'success'); 
+        } catch(e){showToast("Erro: " + e.message, "error");} finally {esconderLoading();}
+    });
+}
 
 async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN')return; if(!confirm("Apagar?"))return; mostrarLoading("Apagando..."); try { await db.from('vendas').delete().eq('id',id); await buscarVendasServidor(); showToast("Excluído!","success"); } catch(e){} finally{esconderLoading();} }
+
+// ==========================================
+// EXCLUIR MÊS (Recuperado)
+// ==========================================
+function abrirModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.remove('hidden'); const da = document.getElementById('delMesAno'); if(da) da.value = new Date().getFullYear(); }
+function fecharModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.add('hidden'); }
+
+const formExcMes = document.getElementById('formExcluirMes');
+if(formExcMes) {
+    formExcMes.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const a = document.getElementById('delMesAno').value, m = document.getElementById('delMesNome').value, s = document.getElementById('delMesSenha').value.trim();
+        if(!confirm(`⚠️ ATENÇÃO: Apagar TODOS os lançamentos de ${m}/${a}?`)) return;
+        mostrarLoading("Apagando mês...");
+        try {
+            const u = localStorage.getItem('app_auth_login'), hs = await hashSHA256(s);
+            const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hs);
+            if (data && data.length > 0 && data[0].nivel === 'ADMIN') { 
+                const { error } = await db.from('vendas').delete().eq('ano', a).ilike('mes', m); 
+                if(!error) { showToast("Mês excluído com sucesso!", 'success'); fecharModalExcluirMes(); await buscarVendasServidor(); } 
+                else throw error;
+            }
+            else showToast("Senha ADMIN incorreta.", 'error');
+        } catch (err) { showToast("Erro: " + err.message, "error"); } finally { esconderLoading(); }
+    });
+}
