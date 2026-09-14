@@ -22,7 +22,7 @@
         <h2 id="globalOverlayText" class="text-center text-white text-xl font-extrabold animate-pulse">Processando...</h2>
     </div>
 
-    <!-- MODAIS DE SISTEMA -->
+    <!-- MODAL RESUMO DE LOTE -->
     <div id="modalResumoLote" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 p-5 md:p-6 rounded-3xl shadow-2xl w-full max-w-lg border border-gray-100 dark:border-gray-700 animate-fade-in flex flex-col max-h-[90vh]">
             <div class="text-center mb-4 shrink-0"><div class="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/50 rounded-full flex items-center justify-center mx-auto mb-3"><span class="text-3xl">🚀</span></div><h3 class="text-xl md:text-2xl font-extrabold dark:text-white">Lote Processado!</h3><p class="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-1">Sincronização com o Supabase concluída.</p></div>
@@ -38,26 +38,23 @@
         </div>
     </div>
 
-    <!-- NOVO MODAL: PREVIEW DE SKUS -->
+    <!-- PREVIEW DE SKUS -->
     <div id="modalPreviewSku" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-3xl border border-blue-100 dark:border-gray-700 animate-fade-in">
             <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-4 mb-4">
                 <h3 class="text-xl font-bold dark:text-white flex items-center gap-2">👀 Pré-visualização de Custos</h3>
                 <button onclick="document.getElementById('modalPreviewSku').classList.add('hidden')" class="text-gray-400 hover:text-red-500 text-3xl font-bold transition-colors">&times;</button>
             </div>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Confira as 3 primeiras linhas encontradas na sua planilha. Se os valores estiverem corretos, confirme a sincronização com o banco de dados.</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Confira as 3 primeiras linhas encontradas na sua planilha. Se os valores estiverem corretos, confirme a sincronização.</p>
 
             <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 custom-scrollbar mb-6">
                 <table class="w-full text-left text-sm whitespace-nowrap">
                     <thead class="text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 uppercase font-bold text-xs">
                         <tr><th class="p-4">Código SKU</th><th class="p-4 w-1/2">Descrição do Produto</th><th class="p-4 text-right">Custo Detectado</th></tr>
                     </thead>
-                    <tbody id="tabelaPreviewSkuData" class="text-gray-700 dark:text-gray-300">
-                        <!-- Preenchido via Javascript -->
-                    </tbody>
+                    <tbody id="tabelaPreviewSkuData" class="text-gray-700 dark:text-gray-300"></tbody>
                 </table>
             </div>
-
             <div class="flex flex-col sm:flex-row justify-end gap-4">
                 <button onclick="document.getElementById('modalPreviewSku').classList.add('hidden')" class="w-full sm:w-auto px-6 py-3 rounded-full font-bold text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 shadow-sm transition-colors">Cancelar</button>
                 <button onclick="confirmarImportacaoSkus()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-8 rounded-full shadow-lg transition-transform hover:-translate-y-1">✅ Sincronizar SKUs</button>
@@ -65,7 +62,7 @@
         </div>
     </div>
 
-    <!-- MODAIS DE SENHA E EXCLUSÃO (Mantidos) -->
+    <!-- MODAIS DE SENHA E EXCLUSÃO -->
     <div id="modalSenha" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-gray-100 dark:border-gray-700">
             <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold dark:text-white flex items-center"><span class="mr-2">🔑</span> Alterar Senha</h3><button onclick="fecharModalSenha()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button></div>
@@ -115,7 +112,8 @@
                 <div class="w-12 h-12 bg-gradient-to-tr from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg text-white text-2xl">🚀</div>
                 <div>
                     <h1 class="text-2xl md:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">Gestão S&H</h1>
-                    <div class="flex items-center justify-center md:justify-start mt-1"><span id="statusConexao" class="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"></span><span class="text-xs font-semibold text-gray-500 dark:text-gray-400" id="textoConexao">Supabase DB</span><button onclick="carregarDadosDaNuvem()" class="ml-2 bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded-full w-6 h-6 flex items-center justify-center">🔄</button></div>
+                    <!-- BOTÃO REFRESH AGORA APONTA PARA carregarDadosIniciais -->
+                    <div class="flex items-center justify-center md:justify-start mt-1"><span id="statusConexao" class="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"></span><span class="text-xs font-semibold text-gray-500 dark:text-gray-400" id="textoConexao">Supabase DB</span><button onclick="carregarDadosIniciais()" class="ml-2 bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded-full w-6 h-6 flex items-center justify-center">🔄</button></div>
                 </div>
             </div>
             <div class="flex flex-wrap justify-center items-center gap-2">
@@ -153,15 +151,15 @@
                 <div class="flex flex-col md:flex-row justify-between mb-4 gap-4 items-start md:items-center">
                     <h2 class="text-xl font-extrabold dark:text-white">📚 Histórico</h2>
                     <div class="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-                        <input type="text" id="buscaVendas" oninput="aplicarFiltros()" placeholder="Buscar Venda..." class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
-                        <select id="filtroAno" onchange="aplicarFiltros()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"><option value="TODOS">Todos os Anos</option><option value="2026">2026</option><option value="2025">2025</option></select>
-                        <select id="filtroMes" onchange="aplicarFiltros()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"><option value="TODOS">Todos os Meses</option><option value="JANEIRO">Janeiro</option><option value="FEVEREIRO">Fevereiro</option><option value="MARÇO">Março</option><option value="ABRIL">Abril</option><option value="MAIO">Maio</option><option value="JUNHO">Junho</option><option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option><option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option><option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dezembro</option></select>
-                        <select id="ordenacao" onchange="aplicarFiltros()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm font-bold"><option value="recentes">⇅ Recentes</option><option value="margem_alta">↑ Maior Margem</option><option value="lucro_alto">↑ Maior Lucro</option></select>
+                        <input type="text" id="buscaVendas" oninput="aplicarFiltrosLocais()" placeholder="Buscar Venda..." class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm">
+                        <!-- FILTROS COM BUSCA DIRETO NO SERVIDOR PARA PAGINAÇÃO -->
+                        <select id="filtroAno" onchange="buscarVendasServidor()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"><option value="TODOS">Todos os Anos</option><option value="2026">2026</option><option value="2025">2025</option></select>
+                        <select id="filtroMes" onchange="buscarVendasServidor()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"><option value="TODOS">Todos os Meses</option><option value="JANEIRO">Janeiro</option><option value="FEVEREIRO">Fevereiro</option><option value="MARÇO">Março</option><option value="ABRIL">Abril</option><option value="MAIO">Maio</option><option value="JUNHO">Junho</option><option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option><option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option><option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dezembro</option></select>
+                        <select id="ordenacao" onchange="aplicarFiltrosLocais()" class="w-full sm:w-auto rounded-full px-4 py-2 text-sm border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm font-bold"><option value="recentes">⇅ Recentes</option><option value="margem_alta">↑ Maior Margem</option><option value="lucro_alto">↑ Maior Lucro</option></select>
                     </div>
                 </div>
                 <div class="overflow-x-auto rounded-2xl custom-scrollbar border border-gray-100 dark:border-gray-700"><table class="w-full text-left min-w-[1000px]"><thead class="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase border-b border-gray-100 dark:border-gray-700"><tr><th class="p-4">Período</th><th class="p-4 w-1/4">Descrição</th><th class="p-4 text-center">Status</th><th class="p-4 text-center">Canal</th><th class="p-4 text-center">Qtd</th><th class="p-4 text-right">Bruto</th><th class="p-4 text-right">Repasse</th><th class="p-4 text-right">Custo</th><th class="p-4 text-right">Lucro</th><th class="p-4 text-right">Margem</th><th class="p-4 text-center admin-only">Ação</th></tr></thead><tbody id="tabelaVendas" class="text-sm bg-white dark:bg-gray-900/50"></tbody></table></div>
                 
-                <!-- PAGINAÇÃO VENDAS -->
                 <div class="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4 border-t border-gray-200 dark:border-gray-700 pt-4">
                     <span class="text-xs font-bold text-gray-500 dark:text-gray-400">Páginas de Histórico</span>
                     <div class="flex gap-2 items-center">
@@ -291,7 +289,7 @@
                     <div id="indDataAutomatica" class="hidden absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg rounded-tr-2xl shadow-sm z-10">Data Automática da Planilha Ativa</div>
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Plataforma</label><select id="globalPlataforma" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold"><option value="Mercado Livre">Mercado Livre</option><option value="Shopee">Shopee</option><option value="Direto">Direto</option></select></div>
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Ano</label><input type="number" id="globalAno" oninput="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800"></div>
-                    <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Mês</label><select id="globalMes" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800"><option value="JANEIRO">Jan</option><option value="FEVEREIRO">Fev</option><option value="MARÇO">Mar</option><option value="ABRIL">Abr</option><option value="MAIO">Mai</option><option value="JUNHO">Jun</option><option value="JULHO">Jul</option><option value="AGOSTO">Ago</option><option value="SETEMBRO">Set</option><option value="OUTUBRO">Out</option><option value="NOVEMBRO">Nov</option><option value="DEZEMBRO">Dez</option></select></div>
+                    <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Mês</label><select id="globalMes" onchange="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-800"><option value="JANEIRO">Jan</option><option value="FEVEREIRO">Fev</option><option value="MARÇO">Mar</option><option value="ABRIL">Abril</option><option value="MAIO">Mai</option><option value="JUNHO">Junho</option><option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option><option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option><option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dezembro</option></select></div>
                     <div><label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Imposto Padrão (%)</label><input type="number" id="globalImposto" oninput="salvarEstadoImportacao()" class="w-full p-3 rounded-xl outline-none border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm focus:ring-2 focus:ring-blue-500 font-bold"></div>
                 </div>
 
@@ -322,6 +320,11 @@
         </div>
     </div>
     
+    <!-- CONEXÃO JS (Modularizado) -->
+    <script src="globals.js" defer></script>
+    <script src="auth.js" defer></script>
+    <script src="vendas.js" defer></script>
+    <script src="importacao.js" defer></script>
     <script src="app.js" defer></script>
 </body>
 </html>
