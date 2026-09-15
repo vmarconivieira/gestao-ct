@@ -49,7 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const formEdicaoVenda = document.getElementById('formEditarVenda');
     if(formEdicaoVenda) { formEdicaoVenda.addEventListener('submit', async function(e) { e.preventDefault(); mostrarLoading("Salvando..."); const id = document.getElementById('edit_id').value; const status = document.getElementById('edit_status').value; const sobra = Number(document.getElementById('edit_repasse').value) || 0; const imposto = Number(document.getElementById('edit_imposto').value) || 0; const custo = Number(document.getElementById('edit_custo').value) || 0; const valorVenda = Number(document.getElementById('edit_venda_bruta').value) || 0; const lucro = sobra - imposto - custo; const porcentagem = valorVenda > 0 ? (lucro / valorVenda) : 0; try { const { error } = await db.from('vendas').update({ status, sobra, imposto, custo, lucro, porcentagem }).eq('id', id); if (error) throw error; fecharModalEditarVenda(); await buscarVendasServidor(); showToast("Venda atualizada com sucesso!", "success"); } catch(err) { showToast("Erro ao editar: " + err.message, "error"); } finally { esconderLoading(); } }); }
     
-    // FORMULÁRIO DO KANBAN
     const fKanban = document.getElementById('formKanban');
     if(fKanban) {
         fKanban.addEventListener('submit', async function(e) {
@@ -88,9 +87,6 @@ function acionarBuscaDinamica() { clearTimeout(debounceBuscaTimer); debounceBusc
 
 async function buscarVendasServidor() { const fA = document.getElementById('filtroAno'); const fM = document.getElementById('filtroMes'); const fB = document.getElementById('buscaVendas'); const ano = fA ? fA.value : new Date().getFullYear().toString(); const mes = fM ? fM.value : ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][new Date().getMonth()]; const busca = fB ? fB.value.trim() : ""; mostrarLoading("Buscando dados..."); try { let q = db.from('vendas').select('*').order('created_at', { ascending: false }); if (busca !== "") { q = q.or(`n_venda.ilike.*${busca}*,sku.ilike.*${busca}*,descricao.ilike.*${busca}*,status.ilike.*${busca}*`); } else { if (ano !== "TODOS") q = q.eq('ano', ano); if (mes !== "TODOS") q = q.ilike('mes', mes); } const { data, error } = await q; if (error) throw error; vendasGlobais = (data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes).toUpperCase(), qtd: v.quantidade, descricao: v.descricao, sku: v.sku, nVenda: v.n_venda, urlPlataforma: v.url_ml, plataforma: v.plataforma, valorVenda: Number(v.valor_venda), sobra: Number(v.sobra), imposto: Number(v.imposto), custo: Number(v.custo), lucro: Number(v.lucro), porcentagem: Number(v.porcentagem)*100, status: v.status })); aplicarFiltrosLocais(); } catch (e) { showToast("Erro ao buscar vendas: " + (e.message || e), "error"); } finally { esconderLoading(); } }
 
-// ==========================================
-// KANBAN LOGIC
-// ==========================================
 function abrirModalKanban() { document.getElementById('modalKanban').classList.remove('hidden'); }
 function fecharModalKanban() { document.getElementById('modalKanban').classList.add('hidden'); }
 
@@ -106,43 +102,7 @@ async function buscarKanban() {
     }
 }
 
-function parseLinks(text) {const SUPABASE_URL = "https://jsoujnbaucvvwgfilnoc.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzb3VqbmJhdWN2dndnZmlsbm9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNDA5MzIsImV4cCI6MjEwNDcxNjkzMn0.l-dTfSmQzEsQF0AP-CPx0xZI9ox6hFyF4G8bDKSg7yw";
-
-let db;
-try { db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } 
-catch(e) { console.error("Falha ao inicializar o Supabase:", e); }
-
-let vendasGlobais=[], vendasFiltradasGlobal=[], catalogoSkusGlobais=[], skusFiltradosGlobal=[], catalogoSkus={}; 
-let usuariosGlobais=[], tarefasKanban=[], graficoInstance=null, chartAnalise=null, isDarkMode=false, isFetching=false;
-let paginaAtualVendas=1, paginaAtualSkus=1; const ITENS_POR_PAGINA=50;
-let rawDataGlobal=[], importDataGlobal=[], importHeadersGlobal=[], produtosUnicosGlobal=[], skusParaImportarGlobal=[];
-let debounceBuscaTimer=null; 
-
-function fixText(s) { if(!s || typeof s !== 'string') return s; try { return decodeURIComponent(escape(s)); } catch(e) { return s; } }
-function lerPlanilha(f, cb, errCb) { try { if (f.name.toLowerCase().endsWith('.csv') || f.name.toLowerCase().endsWith('.txt')) { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(ev.target.result,{type:'string'}));}catch(err){errCb(err);} }; r.readAsText(f, 'windows-1252'); } else { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(new Uint8Array(ev.target.result),{type:'array'}));}catch(err){errCb(err);} }; r.readAsArrayBuffer(f); } } catch(err) { errCb(err); } }
-async function hashSHA256(str) { if (window.crypto && window.crypto.subtle) { try { const buf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)); return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join(''); } catch(e) { return btoa(unescape(encodeURIComponent(str))); } } else { return btoa(unescape(encodeURIComponent(str))); } }
-
-function showToast(m, t='info') { const c = document.getElementById('toast-container'); if(!c) return; const toast = document.createElement('div'); toast.className = `toast ${t}`; toast.innerHTML = `<span>${m}</span>`; c.appendChild(toast); setTimeout(() => { toast.style.animation = 'fadeOut 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000); }
-function mostrarLoading(t="Processando...") { const ot = document.getElementById('globalOverlayText'); if(ot) ot.innerText = t; const go = document.getElementById('globalOverlay'); if(go) go.classList.remove('hidden'); }
-function esconderLoading() { const go = document.getElementById('globalOverlay'); if(go) go.classList.add('hidden'); }
-function fecharModalResumoLote() { const rm = document.getElementById('modalResumoLote'); if(rm) rm.classList.add('hidden'); }
-function formatMoney(val) { const n=Number(val)||0; return (n<0?'-':'')+`R$ ${Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2})}`; }
-const universalNumberParse = (val) => { if(!val) return 0; if(typeof val==='number') return val; let s=String(val).trim(); const neg = s.includes('-')||(s.startsWith('(')&&s.endsWith(')')); s=s.replace(/[^0-9.,]/g,''); if(!s) return 0; const lc=s.lastIndexOf(','), ld=s.lastIndexOf('.'); if(lc>ld) s=s.replace(/\./g,'').replace(',','.'); else if(ld>lc && lc!==-1) s=s.replace(/,/g,''); return neg ? -Math.abs(parseFloat(s)||0) : Math.abs(parseFloat(s)||0); };
-
-function aplicarPermissoes() { const nivel = localStorage.getItem('app_auth_nivel') || 'OPERADOR'; document.querySelectorAll('.admin-only').forEach(el => { el.style.display = (nivel !== 'ADMIN') ? 'none' : ''; }); const nt = document.getElementById('nivelText'); if(nt) { nt.innerText = nivel === 'ADMIN' ? "👑 ADMIN" : "👤 OPERADOR"; nt.className = nivel === 'ADMIN' ? "text-[10px] font-extrabold px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" : "text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"; } }
-async function testarConexaoLogin() { const dot=document.getElementById('loginStatusDot'), txt=document.getElementById('loginStatusText'), btn=document.getElementById('btnLogin'); if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"; if(txt) txt.innerText="Testando conexão..."; if(btn) btn.disabled=true; try { if(!window.supabase) throw new Error("Supabase não carregado."); const {error} = await db.from('usuarios').select('id').limit(1); if(error) throw error; if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText="Sistema Online"; if(btn) { btn.disabled=false; btn.classList.remove('opacity-50','cursor-not-allowed'); } } catch(e) { if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2"; if(txt) txt.innerText="Erro: "+e.message; setTimeout(testarConexaoLogin, 6000); } }
-
-document.addEventListener('DOMContentLoaded', () => {
-    inicializarTema(); configurarDataAtual();
-    const token = localStorage.getItem('app_auth_token'), userName = localStorage.getItem('app_auth_name');
-    if (token) { const ls = document.getElementById('loginScreen'); if(ls) ls.classList.add('hidden'); const ac = document.getElementById('appContent'); if(ac) ac.classList.remove('hidden'); const bv = document.getElementById('bemVindoText'); if(userName && bv) bv.innerText = `Olá, ${userName}`; aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais(); } 
-    else { const ls = document.getElementById('loginScreen'); if(ls) ls.classList.remove('hidden'); const ac = document.getElementById('appContent'); if(ac) ac.classList.add('hidden'); testarConexaoLogin(); }
-    
-    const formLogin = document.getElementById('formLogin');
-    if(formLogin) { formLogin.addEventListener('submit', async function(e) { e.preventDefault(); const btn=document.getElementById('btnLogin'), spinner=document.getElementById('loginSpinner'); if(btn) btn.classList.add('hidden'); if(spinner) spinner.classList.remove('hidden'); const u=(document.getElementById('loginUser')?.value||'').trim().toLowerCase(), p=(document.getElementById('loginPass')?.value||'').trim(); try { const hp = await hashSHA256(p); const { count } = await db.from('usuarios').select('*', { count: 'exact', head: true }); if (count === 0 && u === 'admin' && p === 'admin') await db.from('usuarios').insert([{ usuario: 'admin', senha: hp, nome: 'Administrador', nivel: 'ADMIN' }]); const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hp); if (data && data.length > 0) { const ud = data[0]; localStorage.setItem('app_auth_token', ud.senha); localStorage.setItem('app_auth_name', ud.nome); localStorage.setItem('app_auth_nivel', ud.nivel); localStorage.setItem('app_auth_login', ud.usuario); document.getElementById('loginScreen').classList.add('hidden'); document.getElementById('appContent').classList.remove('hidden'); const bv = document.getElementById('bemVindoText'); if(bv) bv.innerText = `Olá, ${ud.nome}`; aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais(); showToast('Login efetuado!', 'success'); } else { alert("Acesso negado."); if(btn) btn.classList.remove('hidden'); if(spinner) spinner.classList.add('hidden'); } } catch (err) { alert("Erro servidor."); if(btn) btn.classList.remove('hidden'); if(spinner) spinner.classList.add('hidden'); } }); }
-
-
+function parseLinks(text) {
     if (!text) return '';
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     return text.replace(urlRegex, function(url) {
@@ -183,7 +143,7 @@ function renderKanban() {
             `;
         });
     });
-    aplicarPermissoes(); // Garante que o ícone de lixeira só apareça pro ADMIN
+    aplicarPermissoes(); 
 }
 
 function iniciarDrag(e, id) { e.dataTransfer.setData('text/plain', id); }
