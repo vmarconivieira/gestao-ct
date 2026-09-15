@@ -389,7 +389,11 @@
         <section id="tab-kanban" class="hidden space-y-6 animate-fade-in">
             <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
                 <h2 class="text-xl font-bold dark:text-white flex items-center gap-2">📋 Quadro Operacional</h2>
-                <button onclick="abrirModalKanban()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-6 rounded-full shadow-md transition-colors w-full sm:w-auto">➕ Nova Tarefa</button>
+                <div id="kanbanButtons" class="flex flex-wrap w-full sm:w-auto justify-end gap-2">
+                    <button onclick="exportarKanbanWhatsApp()" class="flex-1 sm:flex-none bg-[#25D366] hover:bg-green-600 text-white font-bold py-2.5 px-5 rounded-full shadow-sm transition-colors text-sm flex items-center justify-center gap-2">💬 WhatsApp</button>
+                    <button onclick="exportarKanbanPNG()" class="flex-1 sm:flex-none bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold py-2.5 px-5 rounded-full shadow-sm transition-colors text-sm flex items-center justify-center gap-2">📤 Imagem PNG</button>
+                    <button onclick="abrirModalKanban()" class="flex-1 sm:flex-none bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-6 rounded-full shadow-md transition-colors text-sm flex items-center justify-center gap-2">➕ Nova Tarefa</button>
+                </div>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -412,7 +416,6 @@
                 </div>
             </div>
         </section>
-
         <!-- ABA INTELIGÊNCIA -->
         <section id="tab-analise" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only">
             <div class="flex flex-col sm:flex-row justify-between mb-6 gap-4">
@@ -472,7 +475,7 @@
                         <option value="JULHO">Julho</option>
                         <option value="AGOSTO">Ago</option>
                         <option value="SETEMBRO">Set</option>
-                        <option value="OUTUBRO">Out</option>
+                        <option value="OUTUBRO">Outubro</option>
                         <option value="NOVEMBRO">Nov</option>
                         <option value="DEZEMBRO">Dez</option>
                     </select>
@@ -748,7 +751,7 @@
                             <option value="AGOSTO">Agosto</option>
                             <option value="SETEMBRO">Setembro</option>
                             <option value="OUTUBRO">Outubro</option>
-                            <option value="NOVEMBRO">Nov</option>
+                            <option value="NOVEMBRO">Novembro</option>
                             <option value="DEZEMBRO">Dez</option>
                         </select>
                     </div>
@@ -795,6 +798,6 @@
         </div>
     </div>
     
-    <script src="app.js?v=1.1" defer></script>
+    <script src="app.js?v=1.2" defer></script>
 </body>
 </html>
