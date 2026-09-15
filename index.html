@@ -12,7 +12,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=1.5">
 </head>
 <body class="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 text-gray-800 dark:from-gray-900 dark:via-gray-800 dark:to-slate-900 dark:text-gray-100 min-h-screen p-3 sm:p-5 transition-colors duration-500">
 
@@ -126,23 +126,37 @@
             </form>
         </div>
     </div>
-
-    <!-- MODAL NOVA TAREFA KANBAN -->
+    <!-- MODAL KANBAN (NOVO / EDITAR) -->
     <div id="modalKanban" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-lg border border-purple-100 dark:border-gray-700 animate-fade-in">
+        <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-2xl border border-purple-100 dark:border-gray-700 animate-fade-in max-h-[95vh] overflow-y-auto custom-scrollbar">
             <div class="flex justify-between items-start mb-4">
-                <h3 class="text-xl font-bold dark:text-white flex items-center"><span class="mr-2">📋</span> Nova Tarefa</h3>
+                <h3 id="kanbanModalTitle" class="text-xl font-bold dark:text-white flex items-center"><span class="mr-2">📋</span> Tarefa</h3>
                 <button onclick="fecharModalKanban()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button>
             </div>
-            <form id="formKanban" class="flex flex-col gap-4">
+            <form id="formKanban" class="flex flex-col gap-4 relative">
+                <input type="hidden" id="kanban_id">
+                <input type="file" id="fileUploadKanban" class="hidden" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" onchange="handleKanbanUpload(event)">
+                
                 <div>
                     <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Título</label>
                     <input type="text" id="kanban_titulo" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-colors shadow-sm font-bold">
                 </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Descrição / Links</label>
-                    <textarea id="kanban_descricao" rows="4" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-colors shadow-sm custom-scrollbar"></textarea>
+                
+                <div class="relative">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 flex justify-between">
+                        <span>Descrição (Digite <span class="bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded text-purple-600 dark:text-purple-400 shadow-sm border border-gray-300 dark:border-gray-500">/</span> para anexos e tabelas)</span>
+                    </label>
+                    <textarea id="kanban_descricao" rows="8" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-colors shadow-sm custom-scrollbar font-mono text-sm leading-relaxed"></textarea>
+                    
+                    <!-- SLASH MENU FLUTUANTE -->
+                    <div id="slashMenu" class="hidden absolute bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 rounded-xl p-2 z-10 w-56 text-sm top-1/2 left-4 animate-fade-in">
+                        <div class="text-[10px] font-bold text-gray-400 mb-2 px-2 uppercase tracking-wide">Inserir Bloco</div>
+                        <button type="button" onclick="triggerKanbanUpload('image')" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold transition-colors flex items-center gap-3"><span>📷</span> Imagem / Foto</button>
+                        <button type="button" onclick="triggerKanbanUpload('file')" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold transition-colors flex items-center gap-3"><span>📄</span> Documento (PDF)</button>
+                        <button type="button" onclick="insertTabela()" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold transition-colors flex items-center gap-3"><span>📊</span> Tabela Padrão</button>
+                    </div>
                 </div>
+
                 <div>
                     <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Prioridade</label>
                     <select id="kanban_prioridade" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-colors shadow-sm font-bold">
@@ -153,7 +167,7 @@
                 </div>
                 <div class="flex gap-3 mt-4">
                     <button type="button" onclick="fecharModalKanban()" class="w-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold py-3.5 rounded-xl shadow transition-colors">Cancelar</button>
-                    <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Criar Tarefa</button>
+                    <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Salvar Tarefa</button>
                 </div>
             </form>
         </div>
@@ -384,6 +398,7 @@
                 </div>
             </section>
         </div>
+
         <!-- ABA KANBAN -->
         <section id="tab-kanban" class="hidden space-y-6 animate-fade-in">
             <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -817,6 +832,7 @@
         </div>
     </div>
     
-    <script src="app.js?v=1.4" defer></script>
+    <!-- SCRIPTS MANTIDOS AQUI -->
+    <script src="app.js?v=1.5" defer></script>
 </body>
 </html>
