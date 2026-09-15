@@ -87,6 +87,9 @@ function acionarBuscaDinamica() { clearTimeout(debounceBuscaTimer); debounceBusc
 
 async function buscarVendasServidor() { const fA = document.getElementById('filtroAno'); const fM = document.getElementById('filtroMes'); const fB = document.getElementById('buscaVendas'); const ano = fA ? fA.value : new Date().getFullYear().toString(); const mes = fM ? fM.value : ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][new Date().getMonth()]; const busca = fB ? fB.value.trim() : ""; mostrarLoading("Buscando dados..."); try { let q = db.from('vendas').select('*').order('created_at', { ascending: false }); if (busca !== "") { q = q.or(`n_venda.ilike.*${busca}*,sku.ilike.*${busca}*,descricao.ilike.*${busca}*,status.ilike.*${busca}*`); } else { if (ano !== "TODOS") q = q.eq('ano', ano); if (mes !== "TODOS") q = q.ilike('mes', mes); } const { data, error } = await q; if (error) throw error; vendasGlobais = (data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes).toUpperCase(), qtd: v.quantidade, descricao: v.descricao, sku: v.sku, nVenda: v.n_venda, urlPlataforma: v.url_ml, plataforma: v.plataforma, valorVenda: Number(v.valor_venda), sobra: Number(v.sobra), imposto: Number(v.imposto), custo: Number(v.custo), lucro: Number(v.lucro), porcentagem: Number(v.porcentagem)*100, status: v.status })); aplicarFiltrosLocais(); } catch (e) { showToast("Erro ao buscar vendas: " + (e.message || e), "error"); } finally { esconderLoading(); } }
 
+// ==========================================
+// KANBAN LOGIC
+// ==========================================
 function abrirModalKanban() { document.getElementById('modalKanban').classList.remove('hidden'); }
 function fecharModalKanban() { document.getElementById('modalKanban').classList.add('hidden'); }
 
@@ -193,13 +196,82 @@ function carregarFiltroAnalise() { const s = document.getElementById('selectAnal
 function renderizarAbaInteligencia() { const sA = document.getElementById('selectAnaliseSku'); const k = sA ? sA.value : ''; const v = document.getElementById('containerAnaliseVazia'), d = document.getElementById('containerAnaliseDados'); if(!k) { if(v) v.classList.remove('hidden'); if(d) d.classList.add('hidden'); return; } if(v) v.classList.add('hidden'); if(d) d.classList.remove('hidden'); const vs = vendasGlobais.filter(x => (String(x.sku||"").trim().toUpperCase() || String(x.descricao||"").trim()).toUpperCase() === k.toUpperCase()).sort((a,b) => new Date(a.ano, a.mes) - new Date(b.ano, b.mes)); let u=0, r=0, l=0; const hP=[], hC=[], hM=[], lx=[]; vs.forEach(x => { if(x.valorVenda<=0) return; const q=x.qtd>0?x.qtd:1; u+=q; r+=x.valorVenda; l+=x.lucro; lx.push(`${x.mes.substring(0,3)}/${x.ano}`); hP.push(x.valorVenda/q); hC.push(x.custo/q); hM.push(x.porcentagem); }); const pm = u>0?(r/u):0, mm = r>0?(l/r)*100:0; const aqt = document.getElementById('analiseQtdTotal'); if(aqt) aqt.innerText = u; const apm = document.getElementById('analisePrecoMedio'); if(apm) apm.innerText = `R$ ${pm.toFixed(2)}`; const amm = document.getElementById('analiseMargemMedia'); if(amm) { amm.innerText = `${mm.toFixed(2)}%`; amm.className = mm < 10 ? "text-2xl font-extrabold text-red-600 dark:text-red-400" : (mm <= 20 ? "text-2xl font-extrabold text-yellow-500 dark:text-yellow-400" : "text-2xl font-extrabold text-emerald-600 dark:text-emerald-400"); } const cEl = document.getElementById('chartAnaliseSku'); if(cEl) { if(chartAnalise) chartAnalise.destroy(); chartAnalise = new Chart(cEl.getContext('2d'), { type:'line', data:{labels:lx, datasets:[{label:'Preço', data:hP, borderColor:'#3b82f6'}, {label:'Custo', data:hC, borderColor:'#ef4444'}, {label:'Margem', data:hM, borderColor:'#10b981', yAxisID:'y1'}]}, options:{responsive:true, maintainAspectRatio:false, scales:{y:{position:'left'}, y1:{position:'right'}}} }); } }
 
 function gerarCanvasAreaTopo() { return new Promise((res, rej) => { switchTab('dashboard'); window.scrollTo(0,0); const s = document.getElementById('secaoHistorico'); const w = s ? s.style.display !== 'none' : false; if(s) s.style.display = 'none'; const a = document.getElementById('areaExport'); if(!a) return rej("Area not found"); const oW = a.style.width, oP = a.style.padding, oB = a.style.backgroundColor, cW = a.offsetWidth || window.innerWidth; a.style.width = cW+'px'; a.style.padding = '24px'; a.style.backgroundColor = isDarkMode?'#1f2937':'#f8fafc'; setTimeout(() => { html2canvas(a, {scale:2, useCORS:true, width:cW, windowWidth:cW}).then(c => { a.style.width=oW; a.style.padding=oP; a.style.backgroundColor=oB; if(s && w) s.style.display=''; res(c); }).catch(rej); }, 500); }); }
-function exportarRelatorioPNG() { mostrarLoading("Gerando imagem..."); gerarCanvasAreaTopo().then(c => { c.toBlob(async (blob) => { try { const f = new File([blob], "Relatorio_Vendas.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão S&H', text: 'Resumo Financeiro Atualizado', files: [f] }); } else { const l = document.createElement('a'); l.download = `Relatorio_Vendas.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Compartilhamento cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { esconderLoading(); showToast("Erro", "error"); }); }
-function exportarKanbanPNG() { mostrarLoading("Gerando imagem do Kanban..."); const k = document.getElementById('tab-kanban'), b = document.getElementById('kanbanButtons'); if(b) b.style.display = 'none'; const oB = k.style.backgroundColor, oP = k.style.padding; k.style.backgroundColor = isDarkMode ? '#1f2937' : '#f8fafc'; k.style.padding = '24px'; k.style.borderRadius = '24px'; setTimeout(() => { html2canvas(k, {scale:2, useCORS:true, windowWidth: k.scrollWidth}).then(c => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; c.toBlob(async (blob) => { try { const f = new File([blob], "Kanban_Operacional.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão S&H', text: 'Quadro Kanban Atualizado', files: [f] }); } else { const l = document.createElement('a'); l.download = `Kanban_Operacional.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Compartilhamento cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; esconderLoading(); showToast("Erro ao gerar imagem", "error"); }); }, 500); }
-function exportarKanbanWhatsApp() { let txt = `📋 *Quadro Operacional - Gestão S&H*\n📅 ${new Date().toLocaleDateString('pt-BR')}\n\n`; const col = { 'A Fazer': [], 'Em Andamento': [], 'Concluído': [] }; tarefasKanban.forEach(t => { if(col[t.status]) col[t.status].push(t); }); const ic = { 'A Fazer': '🔴', 'Em Andamento': '🔵', 'Concluído': '🟢' }; Object.keys(col).forEach(s => { txt += `${ic[s]} *${s.toUpperCase()} (${col[s].length})*\n`; if(col[s].length === 0) txt += `  _Nenhuma tarefa_\n`; else col[s].forEach(t => { let p = t.prioridade === 'Alta' ? '🚨' : (t.prioridade === 'Média' ? '⚡' : '🔽'); txt += `  ▪️ ${t.titulo} [${p}]\n`; }); txt += `\n`; }); window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt.trim())}`, '_blank'); }
+function exportarRelatorioPNG() { mostrarLoading("Gerando imagem..."); gerarCanvasAreaTopo().then(c => { c.toBlob(async (blob) => { try { const f = new File([blob], "Relatorio_Vendas.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão C&T', text: 'Resumo Financeiro Atualizado', files: [f] }); } else { const l = document.createElement('a'); l.download = `Relatorio_Vendas.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Compartilhamento cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { esconderLoading(); showToast("Erro", "error"); }); }
+function exportarKanbanPNG() { mostrarLoading("Gerando imagem do Kanban..."); const k = document.getElementById('tab-kanban'), b = document.getElementById('kanbanButtons'); if(b) b.style.display = 'none'; const oB = k.style.backgroundColor, oP = k.style.padding; k.style.backgroundColor = isDarkMode ? '#1f2937' : '#f8fafc'; k.style.padding = '24px'; k.style.borderRadius = '24px'; setTimeout(() => { html2canvas(k, {scale:2, useCORS:true, windowWidth: k.scrollWidth}).then(c => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; c.toBlob(async (blob) => { try { const f = new File([blob], "Kanban_Operacional.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão C&T', text: 'Quadro Kanban Atualizado', files: [f] }); } else { const l = document.createElement('a'); l.download = `Kanban_Operacional.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Compartilhamento cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; esconderLoading(); showToast("Erro ao gerar imagem", "error"); }); }, 500); }
+function exportarKanbanWhatsApp() { let txt = `📋 *Quadro Operacional - Gestão C&T*\n📅 ${new Date().toLocaleDateString('pt-BR')}\n\n`; const col = { 'A Fazer': [], 'Em Andamento': [], 'Concluído': [] }; tarefasKanban.forEach(t => { if(col[t.status]) col[t.status].push(t); }); const ic = { 'A Fazer': '🔴', 'Em Andamento': '🔵', 'Concluído': '🟢' }; Object.keys(col).forEach(s => { txt += `${ic[s]} *${s.toUpperCase()} (${col[s].length})*\n`; if(col[s].length === 0) txt += `  _Nenhuma tarefa_\n`; else col[s].forEach(t => { let p = t.prioridade === 'Alta' ? '🚨' : (t.prioridade === 'Média' ? '⚡' : '🔽'); txt += `  ▪️ ${t.titulo} [${p}]\n`; }); txt += `\n`; }); window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt.trim())}`, '_blank'); }
 
 function calcularMargemForm() { const q=Number(document.getElementById('quantidade')?.value)||1, v=Number(document.getElementById('valorUnitario')?.value)||0, i=Number(document.getElementById('imposto')?.value)||0, c=Number(document.getElementById('custo')?.value)||0; const t=q*v, s=t-(q*i), l=s-(q*c); const ps = document.getElementById('previewSobra'); if(ps) ps.innerText=formatMoney(s); const pl = document.getElementById('previewLucro'); if(pl) pl.innerText=formatMoney(l); const pm = document.getElementById('previewMargem'); if(pm) pm.innerText=`${t>0?((l/t)*100).toFixed(2):0}%`; }
-function calcularSimuladores() { const c=Number(document.getElementById('calcCusto')?.value)||0, i=Number(document.getElementById('calcImposto')?.value)||0, cm=Number(document.getElementById('calcComissao')?.value)||0, f=Number(document.getElementById('calcFrete')?.value)||0, v=Number(document.getElementById('calcVenda')?.value)||0, m=Number(document.getElementById('calcMargemAlvo')?.value)||0; let lr=0, mr=0, ps=0, lp=0; if(v>0){lr=v-(v*(i/100))-(v*(cm/100))-f-c;mr=(lr/v)*100;} const s=(i/100)+(cm/100)+(m/100); if(s<1) {ps=(c+f)/(1-s);lp=ps*(m/100);} const sl1 = document.getElementById('simLucro1'); if(sl1) { sl1.innerText=formatMoney(lr); sl1.className = lr >= 0 ? "text-emerald-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; } const sm1 = document.getElementById('simMargem1'); if(sm1) { sm1.innerText=`${mr.toFixed(2)}%`; sm1.className = mr >= 0 ? "text-purple-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; } const sp2 = document.getElementById('simPreco2'); if(sp2) sp2.innerText=formatMoney(ps); const sl2 = document.getElementById('simLucro2'); if(sl2) sl2.innerText=formatMoney(lp); }
-function limparSimulador() { ['calcVenda','calcCusto','calcImposto','calcComissao','calcFrete','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
+
+function mudarPlataformaSimulador() {
+    const plat = document.getElementById('calcPlataforma').value;
+    const lblFixo = document.getElementById('lblCalcFixo');
+    const lblComissao = document.getElementById('lblCalcComissao');
+    const boxFretePerc = document.getElementById('boxCalcFretePerc');
+    const boxAfiliado = document.getElementById('boxCalcAfiliado');
+
+    if (plat === 'ML') {
+        lblFixo.innerText = 'Frete ML (R$)';
+        lblComissao.innerText = 'Comissão ML (%)';
+        boxFretePerc.classList.add('hidden');
+        boxAfiliado.classList.add('hidden');
+    } else if (plat === 'SHOPEE') {
+        lblFixo.innerText = 'Taxa Item (R$)';
+        lblComissao.innerText = 'Comissão Shopee (%)';
+        boxFretePerc.classList.add('hidden');
+        boxAfiliado.classList.add('hidden');
+    } else if (plat === 'TIKTOK') {
+        lblFixo.innerText = 'Taxa Item (R$)';
+        lblComissao.innerText = 'Comissão TikTok (%)';
+        boxFretePerc.classList.remove('hidden');
+        boxAfiliado.classList.remove('hidden');
+    }
+    calcularSimuladores();
+}
+
+function calcularSimuladores() {
+    const plat = document.getElementById('calcPlataforma')?.value || 'ML';
+    const c = Number(document.getElementById('calcCusto')?.value) || 0;
+    const emb = Number(document.getElementById('calcEmbalagem')?.value) || 0;
+    const imp = Number(document.getElementById('calcImposto')?.value) || 0;
+    const fixo = Number(document.getElementById('calcFixo')?.value) || 0;
+    const com = Number(document.getElementById('calcComissao')?.value) || 0;
+    const fretePerc = plat === 'TIKTOK' ? (Number(document.getElementById('calcFretePerc')?.value) || 0) : 0;
+    const afil = plat === 'TIKTOK' ? (Number(document.getElementById('calcAfiliado')?.value) || 0) : 0;
+    
+    const v = Number(document.getElementById('calcVenda')?.value) || 0;
+    const m = Number(document.getElementById('calcMargemAlvo')?.value) || 0;
+
+    let lr = 0, mr = 0, ps = 0, lp = 0;
+
+    const pImp = imp / 100;
+    const pCom = com / 100;
+    const pFrete = fretePerc / 100;
+    const pAfil = afil / 100;
+    const pMargem = m / 100;
+
+    const somaPercCusto = pCom + pImp + pFrete + pAfil;
+    const somaPercTotal = somaPercCusto + pMargem;
+
+    if (v > 0) {
+        lr = v - c - emb - fixo - (v * somaPercCusto);
+        mr = (lr / v) * 100;
+    }
+
+    if (somaPercTotal < 1) {
+        ps = (c + emb + fixo) / (1 - somaPercTotal);
+        lp = ps * pMargem;
+    }
+
+    const sl1 = document.getElementById('simLucro1'); 
+    if(sl1) { sl1.innerText=formatMoney(lr); sl1.className = lr >= 0 ? "text-emerald-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; }
+    const sm1 = document.getElementById('simMargem1'); 
+    if(sm1) { sm1.innerText=`${mr.toFixed(2)}%`; sm1.className = mr >= 0 ? "text-purple-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; }
+    
+    const sp2 = document.getElementById('simPreco2'); if(sp2) sp2.innerText=formatMoney(ps);
+    const sl2 = document.getElementById('simLucro2'); if(sl2) sl2.innerText=formatMoney(lp);
+}
+
+function limparSimulador() { ['calcVenda','calcCusto','calcEmbalagem','calcImposto','calcFixo','calcComissao','calcFretePerc','calcAfiliado','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
 
 function iniciarImportacao(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Analisando Vendas..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Planilha vazia","error"); } let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}} let colSeen = {}; importHeadersGlobal = rawDataGlobal[ml].map((h, i) => { let baseName = h ? fixText(String(h)).trim() : `Vazia_${i}`; if(colSeen[baseName]) { colSeen[baseName]++; return `${baseName} ${colSeen[baseName]}`; } else { colSeen[baseName] = 1; return baseName; } }); importDataGlobal=[]; for(let i=ml+1;i<rawDataGlobal.length;i++){ let o={}, hd=false; rawDataGlobal[i].forEach((v,id)=>{ let val = (typeof v === 'string') ? fixText(v) : v; o[importHeadersGlobal[id]]=val; if(String(val).trim()!=="") hd=true; }); if(hd) importDataGlobal.push(o); } const dt=new Date(); const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto'; construirInterfaceMapeamento(); const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); const fid = document.getElementById('fileImportData'); if(fid) fid.value=""; esconderLoading(); } catch(err) { esconderLoading(); showToast("Erro: " + err.message, "error"); } }, (err) => { esconderLoading(); showToast("Erro leitura: " + err.message, "error"); }); }
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
