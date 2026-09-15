@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão S&H - Inteligência</title>
+    <title>Gestão C&T - Inteligência</title>
     <link rel="icon" type="image/png" href="logo.png">
     <meta name="theme-color" content="#3b82f6">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -231,9 +231,9 @@
     <div id="loginScreen" class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 dark:from-gray-900 dark:via-gray-800 dark:to-slate-900 transition-colors">
         <div class="glass-panel p-8 md:p-12 rounded-[2rem] shadow-2xl w-full max-w-sm mx-4 flex flex-col items-center animate-fade-in">
             <div class="h-16 flex items-center justify-center mb-6">
-                <img src="logo.png" alt="S&H Logo" class="h-14 w-auto object-contain">
+                <img src="logo.png" alt="C&T Logo" class="h-14 w-auto object-contain">
             </div>
-            <h1 class="text-3xl font-extrabold text-white mb-2 tracking-tight">Gestão S&H</h1>
+            <h1 class="text-3xl font-extrabold text-white mb-2 tracking-tight">Gestão C&T</h1>
             <p class="text-blue-100 dark:text-gray-300 text-sm font-semibold mb-8">Acesse sua conta para continuar</p>
             <form id="formLogin" class="w-full flex flex-col gap-4">
                 <input type="text" id="loginUser" required placeholder="Usuário" class="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none font-semibold focus:ring-2 focus:ring-blue-500 shadow-inner">
@@ -256,10 +256,10 @@
         <header class="glass-panel p-4 md:p-6 rounded-3xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-4 animate-fade-in">
             <div class="text-center md:text-left flex items-center gap-3">
                 <div class="h-12 flex items-center justify-center">
-                    <img src="logo.png" alt="S&H" class="h-10 w-auto object-contain">
+                    <img src="logo.png" alt="C&T" class="h-10 w-auto object-contain">
                 </div>
                 <div>
-                    <h1 class="text-2xl md:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">Gestão S&H</h1>
+                    <h1 class="text-2xl md:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">Gestão C&T</h1>
                     <div class="flex items-center justify-center md:justify-start mt-1">
                         <span id="statusConexao" class="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"></span>
                         <span class="text-xs font-semibold text-gray-500 dark:text-gray-400" id="textoConexao">Supabase DB</span>
@@ -384,7 +384,6 @@
                 </div>
             </section>
         </div>
-
         <!-- ABA KANBAN -->
         <section id="tab-kanban" class="hidden space-y-6 animate-fade-in">
             <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -416,6 +415,7 @@
                 </div>
             </div>
         </section>
+
         <!-- ABA INTELIGÊNCIA -->
         <section id="tab-analise" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only">
             <div class="flex flex-col sm:flex-row justify-between mb-6 gap-4">
@@ -475,7 +475,7 @@
                         <option value="JULHO">Julho</option>
                         <option value="AGOSTO">Ago</option>
                         <option value="SETEMBRO">Set</option>
-                        <option value="OUTUBRO">Outubro</option>
+                        <option value="OUTUBRO">Out</option>
                         <option value="NOVEMBRO">Nov</option>
                         <option value="DEZEMBRO">Dez</option>
                     </select>
@@ -623,25 +623,44 @@
         <!-- ABA CALCULADORA -->
         <section id="tab-calculadora" class="hidden glass-panel p-5 md:p-8 rounded-3xl">
             <div class="flex flex-col sm:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4">
-                <h2 class="text-xl font-bold dark:text-white">🧮 Simulador</h2>
-                <button onclick="limparSimulador()" class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-2 px-6 rounded-full text-sm font-bold shadow-sm">Limpar Todos</button>
+                <div class="flex items-center gap-4">
+                    <h2 class="text-xl font-bold dark:text-white">🧮 Simulador</h2>
+                    <select id="calcPlataforma" onchange="mudarPlataformaSimulador()" class="p-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold text-sm">
+                        <option value="ML">Mercado Livre</option>
+                        <option value="SHOPEE">Shopee</option>
+                        <option value="TIKTOK">TikTok Shop</option>
+                    </select>
+                </div>
+                <button onclick="limparSimulador()" class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-2 px-6 rounded-full text-sm font-bold shadow-sm transition-colors hover:bg-gray-300 dark:hover:bg-gray-600">Limpar Todos</button>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <div>
                     <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Base (R$)</label>
                     <input type="number" id="calcCusto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-red-500 outline-none focus:ring-2 focus:ring-red-500 font-bold shadow-sm">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Embalagem (R$)</label>
+                    <input type="number" id="calcEmbalagem" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
                 </div>
                 <div>
                     <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Imposto (%)</label>
                     <input type="number" id="calcImposto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
                 </div>
                 <div>
-                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Comissão (%)</label>
-                    <input type="number" id="calcComissao" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                    <label id="lblCalcFixo" class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Frete ML (R$)</label>
+                    <input type="number" id="calcFixo" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
                 </div>
                 <div>
-                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Frete Fixo (R$)</label>
-                    <input type="number" id="calcFrete" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                    <label id="lblCalcComissao" class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Comissão ML (%)</label>
+                    <input type="number" id="calcComissao" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div id="boxCalcFretePerc" class="hidden">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Frete TikTok (%)</label>
+                    <input type="number" id="calcFretePerc" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div id="boxCalcAfiliado" class="hidden">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Afiliado (%)</label>
+                    <input type="number" id="calcAfiliado" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
                 </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -748,10 +767,10 @@
                             <option value="MAIO">Mai</option>
                             <option value="JUNHO">Junho</option>
                             <option value="JULHO">Julho</option>
-                            <option value="AGOSTO">Agosto</option>
+                            <option value="AGOSTO">Ago</option>
                             <option value="SETEMBRO">Setembro</option>
                             <option value="OUTUBRO">Outubro</option>
-                            <option value="NOVEMBRO">Novembro</option>
+                            <option value="NOVEMBRO">Nov</option>
                             <option value="DEZEMBRO">Dez</option>
                         </select>
                     </div>
@@ -798,6 +817,6 @@
         </div>
     </div>
     
-    <script src="app.js?v=1.2" defer></script>
+    <script src="app.js?v=1.4" defer></script>
 </body>
 </html>
