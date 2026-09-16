@@ -13,6 +13,7 @@ let debounceBuscaTimer=null;
 
 function fixText(s) { if(!s || typeof s !== 'string') return s; try { return decodeURIComponent(escape(s)); } catch(e) { return s; } }
 function lerPlanilha(f, cb, errCb) { try { if (f.name.toLowerCase().endsWith('.csv') || f.name.toLowerCase().endsWith('.txt')) { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(ev.target.result,{type:'string'}));}catch(err){errCb(err);} }; r.readAsText(f, 'windows-1252'); } else { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(new Uint8Array(ev.target.result),{type:'array'}));}catch(err){errCb(err);} }; r.readAsArrayBuffer(f); } } catch(err) { errCb(err); } }
+async function hashSHA256(str) { if (window.crypto && window.crypto.subtle) { try { const buf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)); return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join(''); } catch(e) { return btoa(unescape(encodeURIComponent(str))); } } else { return btoa(unescape(encodeURIComponent(str))); } }
 
 function showToast(m, t='info') { const c = document.getElementById('toast-container'); if(!c) return; const toast = document.createElement('div'); toast.className = `toast ${t}`; toast.innerHTML = `<span>${m}</span>`; c.appendChild(toast); setTimeout(() => { toast.style.animation = 'fadeOut 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000); }
 function mostrarLoading(t="Processando...") { const ot = document.getElementById('globalOverlayText'); if(ot) ot.innerText = t; const go = document.getElementById('globalOverlay'); if(go) go.classList.remove('hidden'); }
@@ -37,7 +38,6 @@ async function testarConexaoLogin() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     inicializarTema(); configurarDataAtual();
-    
     const tabEq = document.getElementById('tab-usuarios'), btnEq = document.getElementById('btn-tab-usuarios');
     if(tabEq) tabEq.remove(); if(btnEq) btnEq.remove();
 
@@ -48,20 +48,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             localStorage.setItem('app_auth_name', perfis.nome);
             localStorage.setItem('app_auth_nivel', perfis.nivel);
             document.getElementById('loginScreen').classList.add('hidden');
-            
             if(perfis.primeiro_acesso) {
                 abrirModalSenha();
                 const btnClose = document.querySelector('#modalSenha button');
                 if(btnClose) btnClose.classList.add('hidden'); 
-                showToast("Bem-vindo! Por segurança, crie sua nova senha.", "info");
+                showToast("Bem-vindo! Crie sua nova senha.", "info");
             } else {
                 document.getElementById('appContent').classList.remove('hidden'); 
                 const bv = document.getElementById('bemVindoText'); if(bv) bv.innerText = `Olá, ${perfis.nome}`; 
                 aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
             }
-        } else {
-            document.getElementById('loginScreen').classList.remove('hidden');
-        }
+        } else document.getElementById('loginScreen').classList.remove('hidden');
     } else {
         document.getElementById('loginScreen').classList.remove('hidden'); 
         document.getElementById('appContent').classList.add('hidden'); 
@@ -74,40 +71,27 @@ document.addEventListener('DOMContentLoaded', async () => {
             e.preventDefault(); 
             const btn=document.getElementById('btnLogin'), spinner=document.getElementById('loginSpinner'); 
             if(btn) btn.classList.add('hidden'); if(spinner) spinner.classList.remove('hidden'); 
-            
             const u=(document.getElementById('loginUser')?.value||'').trim().toLowerCase();
             const p=(document.getElementById('loginPass')?.value||'').trim(); 
             const email = u.includes('@') ? u : `${u}@ct.local`;
-
             try { 
                 const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email: email, password: p });
                 if (authErr) throw new Error("Credenciais inválidas.");
-                
                 const { data: perfis, error: pErr } = await db.from('perfis').select('*').eq('id', authData.user.id).single();
                 if (pErr) throw new Error("Perfil não encontrado.");
-
-                localStorage.setItem('app_auth_name', perfis.nome);
-                localStorage.setItem('app_auth_nivel', perfis.nivel);
-                localStorage.setItem('app_auth_login', u);
-                
+                localStorage.setItem('app_auth_name', perfis.nome); localStorage.setItem('app_auth_nivel', perfis.nivel); localStorage.setItem('app_auth_login', u);
                 document.getElementById('loginScreen').classList.add('hidden');
-                
                 if(perfis.primeiro_acesso) {
                     abrirModalSenha();
                     const btnClose = document.querySelector('#modalSenha button');
                     if(btnClose) btnClose.classList.add('hidden'); 
-                    showToast('Crie uma nova senha para acessar o painel!', 'info');
+                    showToast('Crie uma nova senha para acessar!', 'info');
                 } else {
                     document.getElementById('appContent').classList.remove('hidden');
-                    const bv = document.getElementById('bemVindoText');
-                    if(bv) bv.innerText = `Olá, ${perfis.nome}`;
-                    aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
-                    showToast('Login efetuado com sucesso!', 'success');
+                    const bv = document.getElementById('bemVindoText'); if(bv) bv.innerText = `Olá, ${perfis.nome}`;
+                    aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais(); showToast('Sucesso!', 'success');
                 }
-            } catch (err) { 
-                showToast(err.message, "error"); 
-                if(btn) btn.classList.remove('hidden'); if(spinner) spinner.classList.add('hidden'); 
-            } 
+            } catch (err) { showToast(err.message, "error"); if(btn) btn.classList.remove('hidden'); if(spinner) spinner.classList.add('hidden'); } 
         }); 
     }
 
@@ -119,49 +103,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         e.preventDefault(); 
         const sn = document.getElementById('senhaNova').value.trim(), sc = document.getElementById('senhaNovaConfirma').value.trim(); 
         if (sn !== sc) return showToast("As senhas não conferem.", "error"); 
-        if (sn.length < 6) return showToast("A senha precisa ter no mínimo 6 caracteres.", "error"); 
-        mostrarLoading("Alterando sua senha..."); 
+        if (sn.length < 6) return showToast("Mínimo 6 caracteres.", "error"); 
+        mostrarLoading("Alterando..."); 
         try { 
             const { error } = await db.auth.updateUser({ password: sn });
             if (error) throw error;
-            
             const { data: { session } } = await db.auth.getSession();
             if(session) await db.from('perfis').update({ primeiro_acesso: false }).eq('id', session.user.id);
-            
             fecharModalSenha(); 
             const btnClose = document.querySelector('#modalSenha button');
             if(btnClose) btnClose.classList.remove('hidden'); 
-            
             document.getElementById('appContent').classList.remove('hidden');
-            const n = localStorage.getItem('app_auth_name');
-            const bv = document.getElementById('bemVindoText');
+            const n = localStorage.getItem('app_auth_name'), bv = document.getElementById('bemVindoText');
             if(bv && n) bv.innerText = `Olá, ${n}`;
-            aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
-
-            showToast("Senha salva! Bem-vindo ao painel.", 'success'); 
-        } catch (err) { 
-            showToast("Erro: " + err.message, "error"); 
-        } finally { esconderLoading(); } 
+            aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais(); showToast("Senha salva!", 'success'); 
+        } catch (err) { showToast("Erro: " + err.message, "error"); } finally { esconderLoading(); } 
     }); }
 
     const formExcMes = document.getElementById('formExcluirMes');
     if(formExcMes) { formExcMes.addEventListener('submit', async function(e) { 
         e.preventDefault(); 
         const a = document.getElementById('delMesAno').value, m = document.getElementById('delMesNome').value, s = document.getElementById('delMesSenha').value.trim(); 
-        if(!confirm(`⚠️ ATENÇÃO: Apagar TODOS os lançamentos de ${m}/${a}?`)) return; 
-        mostrarLoading("Verificando credenciais..."); 
+        if(!confirm(`⚠️ Apagar TODOS os lançamentos de ${m}/${a}?`)) return; 
+        mostrarLoading("Verificando..."); 
         try { 
-            const u = localStorage.getItem('app_auth_login') || '';
-            const email = u.includes('@') ? u : `${u}@ct.local`;
+            const u = localStorage.getItem('app_auth_login') || '', email = u.includes('@') ? u : `${u}@ct.local`;
             const { error: authErr } = await db.auth.signInWithPassword({ email: email, password: s });
             if (authErr) throw new Error("Senha ADMIN incorreta.");
-
             if (localStorage.getItem('app_auth_nivel') === 'ADMIN') { 
                 const { error } = await db.from('vendas').delete().eq('ano', a).ilike('mes', m); 
-                if(error) throw error; 
-                showToast("Mês excluído com sucesso!", 'success'); 
-                fecharModalExcluirMes(); await buscarVendasServidor(); 
-            } else { throw new Error("Usuário não possui nível ADMIN."); } 
+                if(error) throw error; showToast("Mês excluído!", 'success'); fecharModalExcluirMes(); await buscarVendasServidor(); 
+            } else throw new Error("Sem permissão ADMIN."); 
         } catch (err) { showToast(err.message, "error"); } finally { esconderLoading(); } 
     }); }
     
@@ -169,26 +141,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(vendaF) { vendaF.addEventListener('submit', async function(e) { e.preventDefault(); mostrarLoading("Salvando..."); const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value; let original_nv = nv || `MANUAL-${Math.random().toString(36).substr(2, 5).toUpperCase()}`; const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${original_nv}/detalhe`:''); const t=q*v, s=t-(q*i), lu=s-(q*c); const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:original_nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 }; try { const { error } = await db.from('vendas').upsert([p], {onConflict:'plataforma,n_venda'}); if(error) throw error; limparRascunho(); await buscarVendasServidor(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(er){showToast("Erro: " + er.message, "error");} finally {esconderLoading();} }); }
 
     const formEdicaoVenda = document.getElementById('formEditarVenda');
-    if(formEdicaoVenda) { formEdicaoVenda.addEventListener('submit', async function(e) { e.preventDefault(); mostrarLoading("Salvando..."); const id = document.getElementById('edit_id').value; const status = document.getElementById('edit_status').value; const sobra = Number(document.getElementById('edit_repasse').value) || 0; const imposto = Number(document.getElementById('edit_imposto').value) || 0; const custo = Number(document.getElementById('edit_custo').value) || 0; const valorVenda = Number(document.getElementById('edit_venda_bruta').value) || 0; const lucro = sobra - imposto - custo; const porcentagem = valorVenda > 0 ? (lucro / valorVenda) : 0; try { const { error } = await db.from('vendas').update({ status, sobra, imposto, custo, lucro, porcentagem }).eq('id', id); if (error) throw error; fecharModalEditarVenda(); await buscarVendasServidor(); showToast("Venda atualizada com sucesso!", "success"); } catch(err) { showToast("Erro ao editar: " + err.message, "error"); } finally { esconderLoading(); } }); }
+    if(formEdicaoVenda) { formEdicaoVenda.addEventListener('submit', async function(e) { e.preventDefault(); mostrarLoading("Salvando..."); const id = document.getElementById('edit_id').value; const status = document.getElementById('edit_status').value; const sobra = Number(document.getElementById('edit_repasse').value) || 0; const imposto = Number(document.getElementById('edit_imposto').value) || 0; const custo = Number(document.getElementById('edit_custo').value) || 0; const valorVenda = Number(document.getElementById('edit_venda_bruta').value) || 0; const lucro = sobra - imposto - custo; const porcentagem = valorVenda > 0 ? (lucro / valorVenda) : 0; try { const { error } = await db.from('vendas').update({ status, sobra, imposto, custo, lucro, porcentagem }).eq('id', id); if (error) throw error; fecharModalEditarVenda(); await buscarVendasServidor(); showToast("Atualizado!", "success"); } catch(err) { showToast("Erro: " + err.message, "error"); } finally { esconderLoading(); } }); }
     
     const kDesc = document.getElementById('kanban_descricao');
-    if(kDesc) { kDesc.addEventListener('keyup', (e) => { const val = kDesc.value; if(val.endsWith('/')) { document.getElementById('slashMenu').classList.remove('hidden'); } else if (!val.includes('/')) { document.getElementById('slashMenu').classList.add('hidden'); } }); }
+    if(kDesc) { kDesc.addEventListener('keyup', (e) => { const val = kDesc.value; if(val.endsWith('/')) document.getElementById('slashMenu').classList.remove('hidden'); else if (!val.includes('/')) document.getElementById('slashMenu').classList.add('hidden'); }); }
 
     const fKanban = document.getElementById('formKanban');
     if(fKanban) {
-        fKanban.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            mostrarLoading("Salvando Tarefa...");
-            const kId = document.getElementById('kanban_id').value;
-            const titulo = document.getElementById('kanban_titulo').value;
-            const descricao = document.getElementById('kanban_descricao').value;
-            const prioridade = document.getElementById('kanban_prioridade').value;
-            try {
-                if (kId) { await db.from('kanban').update({ titulo, descricao, prioridade }).eq('id', kId); } else { await db.from('kanban').insert([{ titulo, descricao, prioridade, status: 'A Fazer' }]); }
-                fecharModalKanban(); fKanban.reset(); await buscarKanban(); showToast("Tarefa salva!", "success");
-            } catch(er) { showToast("Falha ao salvar", "error"); } finally { esconderLoading(); }
-        });
+        fKanban.addEventListener('submit', async function(e) { e.preventDefault(); mostrarLoading("Salvando Tarefa..."); const kId = document.getElementById('kanban_id').value; const titulo = document.getElementById('kanban_titulo').value; const descricao = document.getElementById('kanban_descricao').value; const prioridade = document.getElementById('kanban_prioridade').value; try { if (kId) await db.from('kanban').update({ titulo, descricao, prioridade }).eq('id', kId); else await db.from('kanban').insert([{ titulo, descricao, prioridade, status: 'A Fazer' }]); fecharModalKanban(); fKanban.reset(); await buscarKanban(); showToast("Salvo!", "success"); } catch(er) { showToast("Falha", "error"); } finally { esconderLoading(); } });
     }
+
+    const formSku = document.getElementById('formCadastroSku');
+    if(formSku) { formSku.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await db.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value.toUpperCase(), produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, custo_medio:document.getElementById('skuForm_custoMedio').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosIniciais(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} }); }
 });
 
 async function fazerLogout() { await db.auth.signOut(); localStorage.clear(); location.reload(); }
@@ -196,10 +160,12 @@ function abrirModalSenha() { const m = document.getElementById('modalSenha'); if
 function fecharModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.add('hidden'); }
 function abrirModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.remove('hidden'); const da = document.getElementById('delMesAno'); if(da) da.value = new Date().getFullYear(); }
 function fecharModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.add('hidden'); }
-
 function abrirModalEditarVenda(id) { const v = vendasGlobais.find(x => x.originalIndex == id); if(!v) return; document.getElementById('edit_id').value = v.originalIndex; document.getElementById('edit_descricao').value = v.descricao; document.getElementById('edit_status').value = v.status; document.getElementById('edit_repasse').value = v.sobra; document.getElementById('edit_imposto').value = v.imposto; document.getElementById('edit_custo').value = v.custo; document.getElementById('edit_venda_bruta').value = v.valorVenda; calcularEditMargem(); document.getElementById('modalEditarVenda').classList.remove('hidden'); }
 function fecharModalEditarVenda() { document.getElementById('modalEditarVenda').classList.add('hidden'); }
 function calcularEditMargem() { const repasse = Number(document.getElementById('edit_repasse').value) || 0; const imposto = Number(document.getElementById('edit_imposto').value) || 0; const custo = Number(document.getElementById('edit_custo').value) || 0; const lucro = repasse - imposto - custo; const preview = document.getElementById('edit_lucro_preview'); if(preview) { preview.innerText = formatMoney(lucro); preview.className = lucro >= 0 ? "text-emerald-500 font-extrabold text-xl" : "text-red-500 font-extrabold text-xl"; } }
+async function deletarLancamento(id) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; if(!confirm("Tem certeza que deseja excluir esta venda?")) return; mostrarLoading("Excluindo..."); try { await db.from('vendas').delete().eq('id', id); await buscarVendasServidor(); showToast("Venda excluída", "success"); } catch(e) { showToast("Erro ao excluir", "error"); } finally { esconderLoading(); } }
+
+//parte 2
 
 function acionarBuscaDinamica() { clearTimeout(debounceBuscaTimer); debounceBuscaTimer = setTimeout(() => { buscarVendasServidor(); }, 600); }
 
@@ -208,25 +174,18 @@ async function carregarDadosIniciais() {
     try { 
         const sR = await db.from('custos_sku').select('*'); 
         if (sR.data) { 
-            // Blindagem total contra campos nulos
-            catalogoSkusGlobais = sR.data.map(s => ({ 
-                SKU: String(s.sku || ""), PRODUTO: String(s.produto || ""), 
-                CUSTO_ANTERIOR: Number(s.custo_anterior) || 0, CUSTO_ATUAL: Number(s.custo_atual) || 0, 
-                CUSTO_MEDIO: Number(s.custo_medio) || 0, FORNECEDOR: String(s.fornecedor || ""), 
-                DATA_ATUALIZACAO: s.data_atualizacao, STATUS: String(s.status || "") 
-            })); 
+            catalogoSkusGlobais = sR.data.map(s => ({ SKU: String(s.sku || ""), PRODUTO: String(s.produto || ""), CUSTO_ANTERIOR: Number(s.custo_anterior) || 0, CUSTO_ATUAL: Number(s.custo_atual) || 0, CUSTO_MEDIO: Number(s.custo_medio) || 0, FORNECEDOR: String(s.fornecedor || ""), DATA_ATUALIZACAO: s.data_atualizacao, STATUS: String(s.status || "") })); 
             parseSkusDictionary(); renderPaginaSkus(1); 
         } 
         await buscarVendasServidor(); 
         await buscarKanban(); 
     } catch (e) { 
-        console.error(e);
-        showToast("Falha na sincronização: " + (e.message || "Erro desconhecido"), "error"); 
+        showToast("Falha na sincronização", "error"); 
     } finally { esconderLoading(); } 
 }
 
 async function buscarVendasServidor() { 
-    const fA = document.getElementById('filtroAno'); const fM = document.getElementById('filtroMes'); const fB = document.getElementById('buscaVendas'); const ano = fA ? fA.value : new Date().getFullYear().toString(); const mes = fM ? fM.value : ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][new Date().getMonth()]; const busca = fB ? fB.value.trim() : ""; 
+    const fA = document.getElementById('filtroAno'), fM = document.getElementById('filtroMes'), fB = document.getElementById('buscaVendas'); const ano = fA ? fA.value : new Date().getFullYear().toString(), mes = fM ? fM.value : ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][new Date().getMonth()], busca = fB ? fB.value.trim() : ""; 
     mostrarLoading("Buscando dados..."); 
     const offlineWarning = document.getElementById('offlineWarning');
     try { 
@@ -235,24 +194,12 @@ async function buscarVendasServidor() {
         const { data, error } = await q; 
         if (error) throw error; 
         if (offlineWarning) offlineWarning.classList.add('hidden');
-        
-        // Blindagem total contra campos nulos
-        vendasGlobais = (data || []).map(v => ({ 
-            originalIndex: v.id, ano: v.ano, mes: String(v.mes || "").toUpperCase(), qtd: v.quantidade, 
-            descricao: String(v.descricao || ""), sku: String(v.sku || ""), nVenda: String(v.n_venda || ""), 
-            urlPlataforma: String(v.url_ml || ""), plataforma: String(v.plataforma || ""), 
-            valorVenda: Number(v.valor_venda) || 0, sobra: Number(v.sobra) || 0, imposto: Number(v.imposto) || 0, 
-            custo: Number(v.custo) || 0, lucro: Number(v.lucro) || 0, 
-            porcentagem: Number(v.porcentagem) * 100 || 0, status: String(v.status || "") 
-        })); 
+        vendasGlobais = (data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes || "").toUpperCase(), qtd: v.quantidade, descricao: String(v.descricao || ""), sku: String(v.sku || ""), nVenda: String(v.n_venda || ""), urlPlataforma: String(v.url_ml || ""), plataforma: String(v.plataforma || ""), valorVenda: Number(v.valor_venda) || 0, sobra: Number(v.sobra) || 0, imposto: Number(v.imposto) || 0, custo: Number(v.custo) || 0, lucro: Number(v.lucro) || 0, porcentagem: Number(v.porcentagem) * 100 || 0, status: String(v.status || "") })); 
         aplicarFiltrosLocais(); 
     } catch (e) { 
-        console.error(e);
         if (offlineWarning) offlineWarning.classList.remove('hidden');
     } finally { esconderLoading(); } 
 }
-
-//parte 2 do código
 
 function aplicarFiltrosLocais() { const fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas'); const o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : ""; vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b) || String(v.status).toLowerCase().includes(b)); if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro); atualizarCardsPainel(vendasFiltradasGlobal); atualizarGrafico(vendasFiltradasGlobal); carregarFiltroAnalise(); paginaAtualVendas=1; renderPaginaVendas(1); }
 function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
@@ -271,10 +218,8 @@ function switchTab(id) {
         if(el) el.classList.add('hidden'); 
         if(bt) bt.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float " + (['novo'].includes(t)?'admin-only':''); 
     }); 
-    const selTab = document.getElementById('tab-'+id); 
-    if(selTab) selTab.classList.remove('hidden'); 
-    const selBtn = document.getElementById('btn-tab-'+id); 
-    if(selBtn) selBtn.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float " + (['novo'].includes(id)?'admin-only':''); 
+    const selTab = document.getElementById('tab-'+id); if(selTab) selTab.classList.remove('hidden'); 
+    const selBtn = document.getElementById('btn-tab-'+id); if(selBtn) selBtn.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float " + (['novo'].includes(id)?'admin-only':''); 
     aplicarPermissoes(); 
 }
 function toggleGrafico() { const gc = document.getElementById('graficoContainer'); if(gc) gc.classList.toggle('hidden'); }
@@ -293,28 +238,15 @@ function atualizarGrafico(d) {
     d.forEach(v => {
         const lbl = `${v.mes.substring(0,3)} ${v.ano}`; 
         if(!a[lbl]) a[lbl] = { f: 0, l: 0, sortAno: parseInt(v.ano), sortMes: mapMeses[v.mes] || 0 }; 
-        a[lbl].f += v.valorVenda; 
-        a[lbl].l += v.lucro;
+        a[lbl].f += v.valorVenda; a[lbl].l += v.lucro;
     }); 
     const l = Object.keys(a).sort((x, y) => {
         if(a[x].sortAno !== a[y].sortAno) return a[x].sortAno - a[y].sortAno;
         return a[x].sortMes - a[y].sortMes;
     });
-    const cg = document.getElementById('faturamentoChart'); 
-    if(!cg) return; 
-    const c = cg.getContext('2d'); 
+    const cg = document.getElementById('faturamentoChart'); if(!cg) return; const c = cg.getContext('2d'); 
     if(graficoInstance) graficoInstance.destroy(); 
-    graficoInstance = new Chart(c, {
-        type: 'bar', 
-        data: {
-            labels: l, 
-            datasets: [
-                {label:'Faturamento Bruto', data: l.map(x => a[x].f), backgroundColor:'#3b82f6', borderRadius: 4},
-                {label:'Lucro Líquido', data: l.map(x => a[x].l), backgroundColor:'#10b981', borderRadius: 4}
-            ]
-        }, 
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
-    }); 
+    graficoInstance = new Chart(c, { type: 'bar', data: { labels: l, datasets: [ {label:'Faturamento Bruto', data: l.map(x => a[x].f), backgroundColor:'#3b82f6', borderRadius: 4}, {label:'Lucro Líquido', data: l.map(x => a[x].l), backgroundColor:'#10b981', borderRadius: 4} ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } } }); 
 }
 
 function parseSkusDictionary() { catalogoSkus = {}; catalogoSkusGlobais.forEach(s => { let c = String(s.SKU||"").trim().toUpperCase(); if(c && String(s.STATUS||"").trim().toUpperCase() !== "INATIVO") catalogoSkus[c] = { produto: String(s.PRODUTO).trim(), custo_atual: Number(s.CUSTO_ATUAL) }; }); }
@@ -322,85 +254,114 @@ function parseSkusDictionary() { catalogoSkus = {}; catalogoSkusGlobais.forEach(
 function carregarFiltroAnalise() { const s = document.getElementById('selectAnaliseSku'); if(!s) return; s.innerHTML = '<option value="">-- Produto/SKU --</option>'; const m = new Map(); catalogoSkusGlobais.forEach(x => { let k = String(x.SKU||"").trim().toUpperCase() || String(x.PRODUTO||"").trim(); if(k && !m.has(k)) m.set(k, {sku: x.SKU, nome: x.PRODUTO}); }); vendasGlobais.forEach(v => { let k = String(v.sku||"").trim().toUpperCase() || String(v.descricao||"").trim(); if(k && !m.has(k)) m.set(k, {sku: v.sku, nome: v.descricao}); }); Array.from(m.keys()).sort().forEach(k => { const d = m.get(k), o = document.createElement('option'); o.value = k; o.innerText = d.sku ? `${d.sku} - ${d.nome}` : d.nome; s.appendChild(o); }); }
 function renderizarAbaInteligencia() { const sA = document.getElementById('selectAnaliseSku'); const k = sA ? sA.value : ''; const v = document.getElementById('containerAnaliseVazia'), d = document.getElementById('containerAnaliseDados'); if(!k) { if(v) v.classList.remove('hidden'); if(d) d.classList.add('hidden'); return; } if(v) v.classList.add('hidden'); if(d) d.classList.remove('hidden'); const vs = vendasGlobais.filter(x => (String(x.sku||"").trim().toUpperCase() || String(x.descricao||"").trim()).toUpperCase() === k.toUpperCase()).sort((a,b) => new Date(a.ano, a.mes) - new Date(b.ano, b.mes)); let u=0, r=0, l=0; const hP=[], hC=[], hM=[], lx=[]; vs.forEach(x => { if(x.valorVenda<=0) return; const q=x.qtd>0?x.qtd:1; u+=q; r+=x.valorVenda; l+=x.lucro; lx.push(`${x.mes.substring(0,3)}/${x.ano}`); hP.push(x.valorVenda/q); hC.push(x.custo/q); hM.push(x.porcentagem); }); const pm = u>0?(r/u):0, mm = r>0?(l/r)*100:0; const aqt = document.getElementById('analiseQtdTotal'); if(aqt) aqt.innerText = u; const apm = document.getElementById('analisePrecoMedio'); if(apm) apm.innerText = `R$ ${pm.toFixed(2)}`; const amm = document.getElementById('analiseMargemMedia'); if(amm) { amm.innerText = `${mm.toFixed(2)}%`; amm.className = mm < 10 ? "text-2xl font-extrabold text-red-600 dark:text-red-400" : (mm <= 20 ? "text-2xl font-extrabold text-yellow-500 dark:text-yellow-400" : "text-2xl font-extrabold text-emerald-600 dark:text-emerald-400"); } const cEl = document.getElementById('chartAnaliseSku'); if(cEl) { if(chartAnalise) chartAnalise.destroy(); chartAnalise = new Chart(cEl.getContext('2d'), { type:'line', data:{labels:lx, datasets:[{label:'Preço', data:hP, borderColor:'#3b82f6'}, {label:'Custo', data:hC, borderColor:'#ef4444'}, {label:'Margem', data:hM, borderColor:'#10b981', yAxisID:'y1'}]}, options:{responsive:true, maintainAspectRatio:false, scales:{y:{position:'left'}, y1:{position:'right'}}} }); } }
 
+function renderPaginaSkus(p) { const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b)); const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML=''; skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => { let isActive = String(s.STATUS).trim().toUpperCase() !== "INATIVO"; let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"; let safeSku = String(s.SKU || "").replace(/'/g,"\\'"); const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${safeSku}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${safeSku}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; if(tb) tb.appendChild(tr); }); const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp; const btnP = document.getElementById('btnPrevSkus'); if(btnP) btnP.disabled=paginaAtualSkus===1; const btnN = document.getElementById('btnNextSkus'); if(btnN) btnN.disabled=paginaAtualSkus===tp; aplicarPermissoes(); }
+function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
+function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
+async function deletarSku(skuCode) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; if(!confirm(`Tem certeza que deseja apagar o produto SKU: ${skuCode}?`)) return; mostrarLoading("Apagando SKU..."); try { await db.from('custos_sku').delete().eq('sku', skuCode); await carregarDadosIniciais(); showToast("SKU Excluído!","success"); } catch(e) { showToast("Erro ao excluir", "error"); } finally { esconderLoading(); } }
+
+//parte 3
+
+// ==========================================
+// KANBAN LOGIC & EDITOR
+// ==========================================
+
+function abrirModalKanban() { 
+    document.getElementById('kanban_id').value = ''; 
+    document.getElementById('formKanban').reset();
+    document.getElementById('kanbanModalTitle').innerHTML = '<span class="mr-2">📋</span> Nova Tarefa';
+    document.getElementById('modalKanban').classList.remove('hidden'); 
+    document.getElementById('slashMenu').classList.add('hidden');
+}
+function fecharModalKanban() { document.getElementById('modalKanban').classList.add('hidden'); }
+function editarTarefaKanban(id) {
+    const t = tarefasKanban.find(x => x.id === id); if(!t) return;
+    document.getElementById('kanban_id').value = t.id; document.getElementById('kanban_titulo').value = t.titulo; document.getElementById('kanban_descricao').value = t.descricao || ''; document.getElementById('kanban_prioridade').value = t.prioridade;
+    document.getElementById('kanbanModalTitle').innerHTML = '<span class="mr-2">✏️</span> Editar Tarefa'; document.getElementById('slashMenu').classList.add('hidden'); document.getElementById('modalKanban').classList.remove('hidden');
+}
+function fecharSlashMenu() { document.getElementById('slashMenu').classList.add('hidden'); }
+function insertTabela() { const d = document.getElementById('kanban_descricao'); d.value = d.value.replace(/\/$/, '') + '\n| Produto | Status | Obs |\n| --- | --- | --- |\n| Item 1 | Pendente | - |\n'; fecharSlashMenu(); d.focus(); }
+function triggerKanbanUpload(type) { const fi = document.getElementById('fileUploadKanban'); fi.accept = type === 'image' ? 'image/*' : '*/*'; fi.click(); fecharSlashMenu(); }
+
+function compressImage(file) {
+    return new Promise((resolve) => {
+        if (!file.type.startsWith('image/')) return resolve(file);
+        const reader = new FileReader(); reader.readAsDataURL(file);
+        reader.onload = event => { const img = new Image(); img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas'); const MAX = 1000; let w = img.width, h = img.height;
+                if (w > MAX) { h *= MAX / w; w = MAX; } canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+                canvas.toBlob(blob => resolve(new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".webp", { type: 'image/webp' })), 'image/webp', 0.8);
+            };
+        };
+    });
+}
+
+async function handleKanbanUpload(e) {
+    const file = e.target.files[0]; if(!file) return; mostrarLoading("Anexando Arquivo...");
+    try {
+        let finalFile = file; if(file.type.startsWith('image/')) finalFile = await compressImage(file);
+        const fName = `kanban-${Date.now()}-${Math.random().toString(36).substring(2)}.${finalFile.name.split('.').pop()}`;
+        const { error } = await db.storage.from('kanban-anexos').upload(fName, finalFile); if (error) throw error;
+        const { data } = db.storage.from('kanban-anexos').getPublicUrl(fName);
+        const d = document.getElementById('kanban_descricao');
+        let md = file.type.startsWith('image/') ? `\n![Anexo](${data.publicUrl})\n` : `\n[📄 Abrir ${file.name}](${data.publicUrl})\n`;
+        d.value = d.value.replace(/\/$/, '') + md; showToast("Arquivo Anexado!", "success");
+    } catch(err) { showToast("Erro no anexo: " + err.message, "error"); } finally { esconderLoading(); e.target.value = ''; document.getElementById('kanban_descricao').focus(); }
+}
+
+function parseMarkdown(text) {
+    if (!text) return ''; let html = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="w-full rounded-xl mt-3 mb-3 shadow-md border border-gray-200 dark:border-gray-700 object-cover">');
+    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">$1</a>');
+    html = html.replace(/(href="|src=")?(https?:\/\/[^\s"<>]+)/g, function(match, prefix, url) { if (prefix) return match; return '<a href="' + url + '" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all">' + url + '</a>'; });
+    let lines = html.split('\n'), inTable = false, outHtml = '';
+    for(let line of lines) {
+        if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+            if (!inTable) { outHtml += '<div class="overflow-x-auto my-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><table class="w-full text-left text-xs whitespace-nowrap bg-white dark:bg-gray-800"><tbody class="divide-y divide-gray-200 dark:divide-gray-700">'; inTable = true; }
+            if (line.replace(/[\s\|-]/g, '') === '') continue; let cells = line.split('|').filter((_, i, arr) => i > 0 && i < arr.length - 1);
+            outHtml += '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">' + cells.map(c => `<td class="p-2 border-r border-gray-200 dark:border-gray-700 last:border-0">${c.trim()}</td>`).join('') + '</tr>';
+        } else { if (inTable) { outHtml += '</tbody></table></div>'; inTable = false; } outHtml += line + '\n'; }
+    }
+    if (inTable) outHtml += '</tbody></table></div>'; return outHtml;
+}
+
+async function buscarKanban() {
+    try { const { data, error } = await db.from('kanban').select('*').order('created_at', { ascending: false }); if (!error && data) { tarefasKanban = data; renderKanban(); } } catch (e) { console.log("Kanban ausente."); }
+}
+
+function renderKanban() {
+    const colunas = { 'A Fazer': [], 'Em Andamento': [], 'Concluído': [] }; tarefasKanban.forEach(t => { if(colunas[t.status]) colunas[t.status].push(t); });
+    Object.keys(colunas).forEach(status => {
+        const divCol = document.getElementById(`coluna-${status.replace(/\s+/g, '-')}`), qtdCol = document.getElementById(`qtd-${status.toLowerCase().replace(/\s+/g, '-')}`);
+        if(!divCol) return; divCol.innerHTML = ''; if(qtdCol) qtdCol.innerText = colunas[status].length;
+        colunas[status].forEach(t => {
+            let corPrioridade = "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300", dot = "bg-blue-500";
+            if (t.prioridade === 'Alta') { corPrioridade = "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"; dot = "bg-red-500"; }
+            if (t.prioridade === 'Média') { corPrioridade = "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300"; dot = "bg-yellow-500"; }
+            const dataStr = new Date(t.created_at).toLocaleDateString('pt-BR'), descHtml = parseMarkdown(t.descricao || '');
+            divCol.innerHTML += `<div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 cursor-move hover:shadow-md transition-all group" draggable="true" ondragstart="iniciarDrag(event, '${t.id}')"><div class="flex justify-between items-start mb-2"><span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 ${corPrioridade}"><span class="w-1.5 h-1.5 rounded-full ${dot}"></span> ${t.prioridade}</span><div class="flex gap-2"><button onclick="editarTarefaKanban('${t.id}')" class="text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">✏️</button><button onclick="deletarTarefaKanban('${t.id}')" class="text-gray-400 hover:text-red-500 admin-only opacity-0 group-hover:opacity-100 transition-opacity">🗑️</button></div></div><h4 class="font-bold text-gray-800 dark:text-white text-sm mb-1">${t.titulo}</h4><div class="text-xs text-gray-500 dark:text-gray-400 mb-3 whitespace-pre-wrap">${descHtml}</div><div class="text-[9px] text-gray-400 font-bold text-right border-t border-gray-100 dark:border-gray-700 pt-2 mt-2">${dataStr}</div></div>`;
+        });
+    }); aplicarPermissoes(); 
+}
+
+function iniciarDrag(e, id) { e.dataTransfer.setData('text/plain', id); }
+function permitirDrop(e) { e.preventDefault(); }
+async function soltarCartao(e, novoStatus) { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'), index = tarefasKanban.findIndex(t => t.id === id); if (index > -1 && tarefasKanban[index].status !== novoStatus) { tarefasKanban[index].status = novoStatus; renderKanban(); await db.from('kanban').update({ status: novoStatus }).eq('id', id); } }
+async function deletarTarefaKanban(id) { if(localStorage.getItem('app_auth_nivel') !== 'ADMIN') return; if(!confirm("Excluir tarefa?")) return; try { await db.from('kanban').delete().eq('id', id); await buscarKanban(); showToast("Tarefa removida", "success"); } catch(e) {} }
+
 function gerarCanvasAreaTopo() { return new Promise((res, rej) => { switchTab('dashboard'); window.scrollTo(0,0); const s = document.getElementById('secaoHistorico'); const w = s ? s.style.display !== 'none' : false; if(s) s.style.display = 'none'; const a = document.getElementById('areaExport'); if(!a) return rej("Area not found"); const oW = a.style.width, oP = a.style.padding, oB = a.style.backgroundColor, cW = a.offsetWidth || window.innerWidth; a.style.width = cW+'px'; a.style.padding = '24px'; a.style.backgroundColor = isDarkMode?'#1f2937':'#f8fafc'; setTimeout(() => { html2canvas(a, {scale:2, useCORS:true, width:cW, windowWidth:cW}).then(c => { a.style.width=oW; a.style.padding=oP; a.style.backgroundColor=oB; if(s && w) s.style.display=''; res(c); }).catch(rej); }, 500); }); }
-function exportarRelatorioPNG() { mostrarLoading("Gerando imagem..."); gerarCanvasAreaTopo().then(c => { c.toBlob(async (blob) => { try { const f = new File([blob], "Relatorio_Vendas.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão C&T', text: 'Resumo Financeiro Atualizado', files: [f] }); } else { const l = document.createElement('a'); l.download = `Relatorio_Vendas.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Compartilhamento cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { esconderLoading(); showToast("Erro", "error"); }); }
-function exportarKanbanPNG() { mostrarLoading("Gerando imagem do Kanban..."); const k = document.getElementById('tab-kanban'), b = document.getElementById('kanbanButtons'); if(b) b.style.display = 'none'; const oB = k.style.backgroundColor, oP = k.style.padding; k.style.backgroundColor = isDarkMode ? '#1f2937' : '#f8fafc'; k.style.padding = '24px'; k.style.borderRadius = '24px'; setTimeout(() => { html2canvas(k, {scale:2, useCORS:true, windowWidth: k.scrollWidth}).then(c => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; c.toBlob(async (blob) => { try { const f = new File([blob], "Kanban_Operacional.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão C&T', text: 'Quadro Kanban Atualizado', files: [f] }); } else { const l = document.createElement('a'); l.download = `Kanban_Operacional.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Compartilhamento cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; esconderLoading(); showToast("Erro ao gerar imagem", "error"); }); }, 500); }
+function exportarRelatorioPNG() { mostrarLoading("Gerando imagem..."); gerarCanvasAreaTopo().then(c => { c.toBlob(async (blob) => { try { const f = new File([blob], "Relatorio_Vendas.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão C&T', text: 'Resumo Financeiro Atualizado', files: [f] }); } else { const l = document.createElement('a'); l.download = `Relatorio_Vendas.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { esconderLoading(); showToast("Erro", "error"); }); }
+function exportarKanbanPNG() { mostrarLoading("Gerando imagem..."); const k = document.getElementById('tab-kanban'), b = document.getElementById('kanbanButtons'); if(b) b.style.display = 'none'; const oB = k.style.backgroundColor, oP = k.style.padding; k.style.backgroundColor = isDarkMode ? '#1f2937' : '#f8fafc'; k.style.padding = '24px'; k.style.borderRadius = '24px'; setTimeout(() => { html2canvas(k, {scale:2, useCORS:true, windowWidth: k.scrollWidth}).then(c => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; c.toBlob(async (blob) => { try { const f = new File([blob], "Kanban_Operacional.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão C&T', text: 'Quadro Kanban', files: [f] }); } else { const l = document.createElement('a'); l.download = `Kanban_Operacional.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; esconderLoading(); showToast("Erro ao gerar imagem", "error"); }); }, 500); }
 function exportarKanbanWhatsApp() { let txt = `📋 *Quadro Operacional - Gestão C&T*\n📅 ${new Date().toLocaleDateString('pt-BR')}\n\n`; const col = { 'A Fazer': [], 'Em Andamento': [], 'Concluído': [] }; tarefasKanban.forEach(t => { if(col[t.status]) col[t.status].push(t); }); const ic = { 'A Fazer': '🔴', 'Em Andamento': '🔵', 'Concluído': '🟢' }; Object.keys(col).forEach(s => { txt += `${ic[s]} *${s.toUpperCase()} (${col[s].length})*\n`; if(col[s].length === 0) txt += `  _Nenhuma tarefa_\n`; else col[s].forEach(t => { let p = t.prioridade === 'Alta' ? '🚨' : (t.prioridade === 'Média' ? '⚡' : '🔽'); txt += `  ▪️ ${t.titulo} [${p}]\n`; }); txt += `\n`; }); window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt.trim())}`, '_blank'); }
 
 function calcularMargemForm() { const q=Number(document.getElementById('quantidade')?.value)||1, v=Number(document.getElementById('valorUnitario')?.value)||0, i=Number(document.getElementById('imposto')?.value)||0, c=Number(document.getElementById('custo')?.value)||0; const t=q*v, s=t-(q*i), l=s-(q*c); const ps = document.getElementById('previewSobra'); if(ps) ps.innerText=formatMoney(s); const pl = document.getElementById('previewLucro'); if(pl) pl.innerText=formatMoney(l); const pm = document.getElementById('previewMargem'); if(pm) pm.innerText=`${t>0?((l/t)*100).toFixed(2):0}%`; }
 
-function mudarPlataformaSimulador() {
-    const plat = document.getElementById('calcPlataforma').value;
-    const lblFixo = document.getElementById('lblCalcFixo');
-    const lblComissao = document.getElementById('lblCalcComissao');
-    const boxFretePerc = document.getElementById('boxCalcFretePerc');
-    const boxAfiliado = document.getElementById('boxCalcAfiliado');
-
-    if (plat === 'ML') {
-        lblFixo.innerText = 'Frete ML (R$)';
-        lblComissao.innerText = 'Comissão ML (%)';
-        boxFretePerc.classList.add('hidden');
-        boxAfiliado.classList.add('hidden');
-    } else if (plat === 'SHOPEE') {
-        lblFixo.innerText = 'Taxa Item (R$)';
-        lblComissao.innerText = 'Comissão Shopee (%)';
-        boxFretePerc.classList.add('hidden');
-        boxAfiliado.classList.add('hidden');
-    } else if (plat === 'TIKTOK') {
-        lblFixo.innerText = 'Taxa Item (R$)';
-        lblComissao.innerText = 'Comissão TikTok (%)';
-        boxFretePerc.classList.remove('hidden');
-        boxAfiliado.classList.remove('hidden');
-    }
-    calcularSimuladores();
-}
-
-function calcularSimuladores() {
-    const plat = document.getElementById('calcPlataforma')?.value || 'ML';
-    const c = Number(document.getElementById('calcCusto')?.value) || 0;
-    const emb = Number(document.getElementById('calcEmbalagem')?.value) || 0;
-    const imp = Number(document.getElementById('calcImposto')?.value) || 0;
-    const fixo = Number(document.getElementById('calcFixo')?.value) || 0;
-    const com = Number(document.getElementById('calcComissao')?.value) || 0;
-    const fretePerc = plat === 'TIKTOK' ? (Number(document.getElementById('calcFretePerc')?.value) || 0) : 0;
-    const afil = plat === 'TIKTOK' ? (Number(document.getElementById('calcAfiliado')?.value) || 0) : 0;
-    
-    const v = Number(document.getElementById('calcVenda')?.value) || 0;
-    const m = Number(document.getElementById('calcMargemAlvo')?.value) || 0;
-
-    let lr = 0, mr = 0, ps = 0, lp = 0;
-
-    const pImp = imp / 100;
-    const pCom = com / 100;
-    const pFrete = fretePerc / 100;
-    const pAfil = afil / 100;
-    const pMargem = m / 100;
-
-    const somaPercCusto = pCom + pImp + pFrete + pAfil;
-    const somaPercTotal = somaPercCusto + pMargem;
-
-    if (v > 0) {
-        lr = v - c - emb - fixo - (v * somaPercCusto);
-        mr = (lr / v) * 100;
-    }
-
-    if (somaPercTotal < 1) {
-        ps = (c + emb + fixo) / (1 - somaPercTotal);
-        lp = ps * pMargem;
-    }
-
-    const sl1 = document.getElementById('simLucro1'); 
-    if(sl1) { sl1.innerText=formatMoney(lr); sl1.className = lr >= 0 ? "text-emerald-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; }
-    const sm1 = document.getElementById('simMargem1'); 
-    if(sm1) { sm1.innerText=`${mr.toFixed(2)}%`; sm1.className = mr >= 0 ? "text-purple-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; }
-    
-    const sp2 = document.getElementById('simPreco2'); if(sp2) sp2.innerText=formatMoney(ps);
-    const sl2 = document.getElementById('simLucro2'); if(sl2) sl2.innerText=formatMoney(lp);
-}
-
+function mudarPlataformaSimulador() { const plat = document.getElementById('calcPlataforma').value, lblFixo = document.getElementById('lblCalcFixo'), lblComissao = document.getElementById('lblCalcComissao'), boxFretePerc = document.getElementById('boxCalcFretePerc'), boxAfiliado = document.getElementById('boxCalcAfiliado'); if (plat === 'ML') { lblFixo.innerText = 'Frete ML (R$)'; lblComissao.innerText = 'Comissão ML (%)'; boxFretePerc.classList.add('hidden'); boxAfiliado.classList.add('hidden'); } else if (plat === 'SHOPEE') { lblFixo.innerText = 'Taxa Item (R$)'; lblComissao.innerText = 'Comissão Shopee (%)'; boxFretePerc.classList.add('hidden'); boxAfiliado.classList.add('hidden'); } else if (plat === 'TIKTOK') { lblFixo.innerText = 'Taxa Item (R$)'; lblComissao.innerText = 'Comissão TikTok (%)'; boxFretePerc.classList.remove('hidden'); boxAfiliado.classList.remove('hidden'); } calcularSimuladores(); }
+function calcularSimuladores() { const plat = document.getElementById('calcPlataforma')?.value || 'ML'; const c = Number(document.getElementById('calcCusto')?.value) || 0, emb = Number(document.getElementById('calcEmbalagem')?.value) || 0, imp = Number(document.getElementById('calcImposto')?.value) || 0, fixo = Number(document.getElementById('calcFixo')?.value) || 0, com = Number(document.getElementById('calcComissao')?.value) || 0, fretePerc = plat === 'TIKTOK' ? (Number(document.getElementById('calcFretePerc')?.value) || 0) : 0, afil = plat === 'TIKTOK' ? (Number(document.getElementById('calcAfiliado')?.value) || 0) : 0, v = Number(document.getElementById('calcVenda')?.value) || 0, m = Number(document.getElementById('calcMargemAlvo')?.value) || 0; let lr = 0, mr = 0, ps = 0, lp = 0; const pImp = imp / 100, pCom = com / 100, pFrete = fretePerc / 100, pAfil = afil / 100, pMargem = m / 100, somaPercCusto = pCom + pImp + pFrete + pAfil, somaPercTotal = somaPercCusto + pMargem; if (v > 0) { lr = v - c - emb - fixo - (v * somaPercCusto); mr = (lr / v) * 100; } if (somaPercTotal < 1) { ps = (c + emb + fixo) / (1 - somaPercTotal); lp = ps * pMargem; } const sl1 = document.getElementById('simLucro1'); if(sl1) { sl1.innerText=formatMoney(lr); sl1.className = lr >= 0 ? "text-emerald-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; } const sm1 = document.getElementById('simMargem1'); if(sm1) { sm1.innerText=`${mr.toFixed(2)}%`; sm1.className = mr >= 0 ? "text-purple-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; } const sp2 = document.getElementById('simPreco2'); if(sp2) sp2.innerText=formatMoney(ps); const sl2 = document.getElementById('simLucro2'); if(sl2) sl2.innerText=formatMoney(lp); }
 function limparSimulador() { ['calcVenda','calcCusto','calcEmbalagem','calcImposto','calcFixo','calcComissao','calcFretePerc','calcAfiliado','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
 
-function iniciarImportacao(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Analisando Vendas..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Planilha vazia","error"); } let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}} let colSeen = {}; importHeadersGlobal = rawDataGlobal[ml].map((h, i) => { let baseName = h ? fixText(String(h)).trim() : `Vazia_${i}`; if(colSeen[baseName]) { colSeen[baseName]++; return `${baseName} ${colSeen[baseName]}`; } else { colSeen[baseName] = 1; return baseName; } }); importDataGlobal=[]; for(let i=ml+1;i<rawDataGlobal.length;i++){ let o={}, hd=false; rawDataGlobal[i].forEach((v,id)=>{ let val = (typeof v === 'string') ? fixText(v) : v; o[importHeadersGlobal[id]]=val; if(String(val).trim()!=="") hd=true; }); if(hd) importDataGlobal.push(o); } const dt=new Date(); const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto'; construirInterfaceMapeamento(); const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); const fid = document.getElementById('fileImportData'); if(fid) fid.value=""; esconderLoading(); } catch(err) { esconderLoading(); showToast("Erro: " + err.message, "error"); } }, (err) => { esconderLoading(); showToast("Erro leitura: " + err.message, "error"); }); }
+function iniciarImportacao(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Analisando..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Planilha vazia","error"); } let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}} let colSeen = {}; importHeadersGlobal = rawDataGlobal[ml].map((h, i) => { let baseName = h ? fixText(String(h)).trim() : `Vazia_${i}`; if(colSeen[baseName]) { colSeen[baseName]++; return `${baseName} ${colSeen[baseName]}`; } else { colSeen[baseName] = 1; return baseName; } }); importDataGlobal=[]; for(let i=ml+1;i<rawDataGlobal.length;i++){ let o={}, hd=false; rawDataGlobal[i].forEach((v,id)=>{ let val = (typeof v === 'string') ? fixText(v) : v; o[importHeadersGlobal[id]]=val; if(String(val).trim()!=="") hd=true; }); if(hd) importDataGlobal.push(o); } const dt=new Date(), gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto'; construirInterfaceMapeamento(); const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); const fid = document.getElementById('fileImportData'); if(fid) fid.value=""; esconderLoading(); } catch(err) { esconderLoading(); showToast("Erro: " + err.message, "error"); } }, (err) => { esconderLoading(); showToast("Erro", "error"); }); }
 function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
 function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
 
@@ -414,31 +375,7 @@ function renderPreviewImportacao() { const tb = document.getElementById('tabelaP
 function atualizarMapeamentoDinamico() { const cdEl = document.getElementById('map_data'), gAno = document.getElementById('globalAno'), gMes = document.getElementById('globalMes'), indData = document.getElementById('indDataAutomatica'); if(cdEl && cdEl.value) { if(gAno) gAno.disabled = true; if(gMes) gMes.disabled = true; if(indData) indData.classList.remove('hidden'); } else { if(gAno) gAno.disabled = false; if(gMes) gMes.disabled = false; if(indData) indData.classList.add('hidden'); } extrairProdutosUnicos(); renderPreviewImportacao(); }
 function construirInterfaceMapeamento() { const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML=''; [{id:'map_data',l:'Data',s:['Data da venda', 'Data']}, {id:'map_sku',l:'SKU',s:['SKU']}, {id:'map_desc',l:'Descrição',s:['Título do anúncio', 'Descrição', 'Título']}, {id:'map_nven',l:'Nº Venda',s:['N.º de venda', 'Nº de venda', 'N.º']}, {id:'map_qtd',l:'Qtd',s:['Unidades', 'Unidade', 'Quantidade', 'Qtd']}, {id:'map_status',l:'Status',s:['Estado', 'Status']}, {id:'map_venda',l:'Venda (R$)',s:['Preço unitário de venda do anúncio', 'Preço unitário', 'Receita por pro', 'Venda', 'Bruto']}, {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por envio (BRL)', 'Receita por envio']}, {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de venda e impostos (BRL)', 'Tarifa de venda', 'Taxa']}, {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de envio (BRL)', 'Tarifas de envio', 'Frete']}, {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamentos e reembolsos (BRL)', 'Cancelamentos e reembolsos', 'Cancelamento', 'Estorno']}, {id:'map_total',l:'Total (R$)',s:['Total (BRL)', 'Total']}].forEach(f => { let bestMatch = ""; for(let s of f.s) { let exact = importHeadersGlobal.find(hd => hd.toLowerCase() === s.toLowerCase()); if(exact) { bestMatch = exact; break; } } if(!bestMatch) { for(let s of f.s) { let partial = importHeadersGlobal.find(hd => hd.toLowerCase().includes(s.toLowerCase())); if(partial) { bestMatch = partial; break; } } } let h=`<div class="flex flex-col bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm"><label class="text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">${f.l}</label><select id="${f.id}" onchange="atualizarMapeamentoDinamico()" class="p-2.5 outline-none text-xs border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"><option value="">-- Ignorar --</option>`; importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${hd === bestMatch ? 'selected' : ''}>${hd}</option>`; }); c.innerHTML+=h+'</select></div>'; }); atualizarMapeamentoDinamico(); }
 
-async function processarEnvioEmLote() { mostrarLoading("Sincronizando Lote..."); const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), gpEl = document.getElementById('globalPlataforma'), giEl = document.getElementById('globalImposto'); const aG=gaEl?gaEl.value:new Date().getFullYear(), mG=gmEl?gmEl.value:'', pG=gpEl?gpEl.value:'', impG=Number(giEl?giEl.value:0)||0; const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cnvEl=document.getElementById('map_nven'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total'); const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:''; let orderCounts = {}; for(let r of importDataGlobal) { if(r[cDesc]) { let nv = r[cNv] || "ID-Auto"; orderCounts[nv] = (orderCounts[nv] || 0) + 1; } } let mapVendas = {}, orderIndices = {}, qN = 0, qA = 0; let novosSkusParaSalvar = []; let skuTrackSet = new Set(); const tglSku = document.getElementById('toggleSalvarSkus'); const allowSaveSkus = tglSku ? tglSku.checked : false; let batchTime = Date.now().toString(36).toUpperCase(); for(let i = 0; i < importDataGlobal.length; i++) { let r = importDataGlobal[i]; if(!r[cDesc]) continue; let md=mG, ad=aG; if(cData && r[cData]){ const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;} } let rp_raw = cVen ? universalNumberParse(r[cVen]) : 0; let isUnitario = cVen && String(cVen).toLowerCase().includes('unit'); let q = Number(r[cQtd]) || 1; let bruto = isUnitario ? (rp_raw * q) : rp_raw; let repasse = cTot ? universalNumberParse(r[cTot]) : 0; let es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0; let sk=(cSku&&r[cSku])?String(r[cSku]).trim():"", ds=r[cDesc]?String(r[cDesc]).trim():"N/A", st=cSt&&r[cSt]?r[cSt]:"Concluído"; let original_nv = (cNv && r[cNv]) ? String(r[cNv]).trim() : `MANUAL-${Math.random().toString(36).substr(2, 6).toUpperCase()}-${Date.now().toString().slice(-4)}`; let nv_banco = original_nv; if(orderCounts[original_nv] > 1) { orderIndices[original_nv] = (orderIndices[original_nv] || 0) + 1; nv_banco = `${original_nv}-I${orderIndices[original_nv]}`; } let unit_cost = window.custosMapeadosLote[ds] || 0; let cst = unit_cost * q; let imp = bruto * (impG / 100); let canc=(cTot&&(es<0||repasse<=0))||(!cTot&&(st.toLowerCase().includes('canc')||bruto<=0)); if(canc){ bruto = 0; imp = 0; cst = 0; repasse = 0; } let luc = repasse - imp - cst; let mar = bruto > 0 ? (luc / bruto) : 0; let finalSku = (sk || ds.toUpperCase()).substring(0, 150); if (allowSaveSkus && unit_cost > 0 && !skuTrackSet.has(finalSku)) { skuTrackSet.add(finalSku); let existing = catalogoSkus[finalSku] || Object.values(catalogoSkus).find(x => x.produto.toLowerCase() === ds.toLowerCase()); if (!existing || existing.custo_atual <= 0) { novosSkusParaSalvar.push({ sku: finalSku, produto: ds, custo_atual: unit_cost, status: 'Ativo' }); } } let urlML = (pG === 'Mercado Livre' && !nv_banco.includes('MANUAL')) ? `https://www.mercadolivre.com.br/vendas/${original_nv}/detalhe` : ''; let exv = vendasGlobais.some(v => v.nVenda === nv_banco && v.plataforma === pG); let key = `${pG}_${nv_banco}`; if (!mapVendas[key]) { if(exv) qA++; else qN++; } mapVendas[key] = { ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: nv_banco, plataforma: pG, url_ml: urlML, valor_venda: bruto, sobra: repasse, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es }; } let b = Object.values(mapVendas); if(b.length>0) { try { const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); if(error) throw error; if(novosSkusParaSalvar.length > 0) { const {error: errSku} = await db.from('custos_sku').upsert(novosSkusParaSalvar, {onConflict:'sku'}); if(errSku) console.error("Erro ao salvar novos SKUs:", errSku); } let fTotal = 0, lTotal = 0; b.forEach(x => { fTotal += x.valor_venda; lTotal += x.lucro; }); const rn=document.getElementById('resumoLoteNovos'); if(rn) rn.innerText=qN; const ra=document.getElementById('resumoLoteAtualizados'); if(ra) ra.innerText=qA; const rf=document.getElementById('resumoLoteFat'); if(rf) rf.innerText=formatMoney(fTotal); const rl=document.getElementById('resumoLoteLucro'); if(rl) rl.innerText=formatMoney(lTotal); const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); await carregarDadosIniciais(); const rm=document.getElementById('modalResumoLote'); if(rm) rm.classList.remove('hidden'); } catch(e) { showToast("Erro na importação: " + (e.message || "Falha ao enviar."), "error"); } } else { showToast("Nenhuma linha válida.", "error"); } esconderLoading(); }
+async function processarEnvioEmLote() { mostrarLoading("Sincronizando Lote..."); const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), gpEl = document.getElementById('globalPlataforma'), giEl = document.getElementById('globalImposto'); const aG=gaEl?gaEl.value:new Date().getFullYear(), mG=gmEl?gmEl.value:'', pG=gpEl?gpEl.value:'', impG=Number(giEl?giEl.value:0)||0; const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cnvEl=document.getElementById('map_nven'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total'); const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:''; let orderCounts = {}; for(let r of importDataGlobal) { if(r[cDesc]) { let nv = r[cNv] || "ID-Auto"; orderCounts[nv] = (orderCounts[nv] || 0) + 1; } } let mapVendas = {}, orderIndices = {}, qN = 0, qA = 0; let novosSkusParaSalvar = []; let skuTrackSet = new Set(); const tglSku = document.getElementById('toggleSalvarSkus'); const allowSaveSkus = tglSku ? tglSku.checked : false; for(let i = 0; i < importDataGlobal.length; i++) { let r = importDataGlobal[i]; if(!r[cDesc]) continue; let md=mG, ad=aG; if(cData && r[cData]){ const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;} } let rp_raw = cVen ? universalNumberParse(r[cVen]) : 0; let isUnitario = cVen && String(cVen).toLowerCase().includes('unit'); let q = Number(r[cQtd]) || 1; let bruto = isUnitario ? (rp_raw * q) : rp_raw; let repasse = cTot ? universalNumberParse(r[cTot]) : 0; let es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0; let sk=(cSku&&r[cSku])?String(r[cSku]).trim():"", ds=r[cDesc]?String(r[cDesc]).trim():"N/A", st=cSt&&r[cSt]?r[cSt]:"Concluído"; let original_nv = (cNv && r[cNv]) ? String(r[cNv]).trim() : `MANUAL-${Math.random().toString(36).substr(2, 6).toUpperCase()}-${Date.now().toString().slice(-4)}`; let nv_banco = original_nv; if(orderCounts[original_nv] > 1) { orderIndices[original_nv] = (orderIndices[original_nv] || 0) + 1; nv_banco = `${original_nv}-I${orderIndices[original_nv]}`; } let unit_cost = window.custosMapeadosLote[ds] || 0; let cst = unit_cost * q; let imp = bruto * (impG / 100); let canc=(cTot&&(es<0||repasse<=0))||(!cTot&&(st.toLowerCase().includes('canc')||bruto<=0)); if(canc){ bruto = 0; imp = 0; cst = 0; repasse = 0; } let luc = repasse - imp - cst; let mar = bruto > 0 ? (luc / bruto) : 0; let finalSku = (sk || ds.toUpperCase()).substring(0, 150); if (allowSaveSkus && unit_cost > 0 && !skuTrackSet.has(finalSku)) { skuTrackSet.add(finalSku); let existing = catalogoSkus[finalSku] || Object.values(catalogoSkus).find(x => x.produto.toLowerCase() === ds.toLowerCase()); if (!existing || existing.custo_atual <= 0) { novosSkusParaSalvar.push({ sku: finalSku, produto: ds, custo_atual: unit_cost, status: 'Ativo' }); } } let urlML = (pG === 'Mercado Livre' && !nv_banco.includes('MANUAL')) ? `https://www.mercadolivre.com.br/vendas/${original_nv}/detalhe` : ''; let exv = vendasGlobais.some(v => v.nVenda === nv_banco && v.plataforma === pG); let key = `${pG}_${nv_banco}`; if (!mapVendas[key]) { if(exv) qA++; else qN++; } mapVendas[key] = { ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: nv_banco, plataforma: pG, url_ml: urlML, valor_venda: bruto, sobra: repasse, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es }; } let b = Object.values(mapVendas); if(b.length>0) { try { const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); if(error) throw error; if(novosSkusParaSalvar.length > 0) { const {error: errSku} = await db.from('custos_sku').upsert(novosSkusParaSalvar, {onConflict:'sku'}); if(errSku) console.error("Erro ao salvar novos SKUs:", errSku); } let fTotal = 0, lTotal = 0; b.forEach(x => { fTotal += x.valor_venda; lTotal += x.lucro; }); const rn=document.getElementById('resumoLoteNovos'); if(rn) rn.innerText=qN; const ra=document.getElementById('resumoLoteAtualizados'); if(ra) ra.innerText=qA; const rf=document.getElementById('resumoLoteFat'); if(rf) rf.innerText=formatMoney(fTotal); const rl=document.getElementById('resumoLoteLucro'); if(rl) rl.innerText=formatMoney(lTotal); const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); await carregarDadosIniciais(); const rm=document.getElementById('modalResumoLote'); if(rm) rm.classList.remove('hidden'); } catch(e) { showToast("Erro na importação.", "error"); } } else { showToast("Nenhuma linha válida.", "error"); } esconderLoading(); }
 
-function importarCsvSkus(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Lendo Arquivo de SKUs..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados."); const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase()); const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO")); if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido."); const mapSkus = {}; for(let i=1;i<rawData.length;i++){ const row = rawData[i]; if(row.filter(c=>String(c).trim()!=="").length === 0) continue; let prodName = iP>-1 ? fixText(String(row[iP])).trim() : ''; let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase(); if(!skuCode) continue; let valStr = iC>-1 ? row[iC] : 0; mapSkus[skuCode] = { sku: skuCode, produto: prodName || skuCode, custo_atual: universalNumberParse(valStr), status:'Ativo' }; } skusParaImportarGlobal = Object.values(mapSkus); if(skusParaImportarGlobal.length>0) { const tb = document.getElementById('tabelaPreviewSkuData'); if(tb) { tb.innerHTML = ''; let limit = Math.min(3, skusParaImportarGlobal.length); for(let i=0; i<limit; i++) { let item = skusParaImportarGlobal[i]; tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50"><td class="p-4 font-mono text-[10px] font-bold text-gray-500">${item.sku}</td><td class="p-4 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${item.produto}">${item.produto}</td><td class="p-4 text-right font-extrabold text-red-500">${formatMoney(item.custo_atual)}</td></tr>`; } } esconderLoading(); const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.remove('hidden'); } else { throw new Error("Nenhum dado válido."); } } catch(err){ esconderLoading(); showToast(err.message, "error"); } finally{ const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value=''; } }, (err) => { esconderLoading(); showToast("Erro ao ler arquivo: " + err.message, "error"); }); }
+function importarCsvSkus(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Lendo Arquivo..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawData.length < 2) throw new Error("Planilha vazia."); const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase()); const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO")); if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido."); const mapSkus = {}; for(let i=1;i<rawData.length;i++){ const row = rawData[i]; if(row.filter(c=>String(c).trim()!=="").length === 0) continue; let prodName = iP>-1 ? fixText(String(row[iP])).trim() : ''; let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase(); if(!skuCode) continue; let valStr = iC>-1 ? row[iC] : 0; mapSkus[skuCode] = { sku: skuCode, produto: prodName || skuCode, custo_atual: universalNumberParse(valStr), status:'Ativo' }; } skusParaImportarGlobal = Object.values(mapSkus); if(skusParaImportarGlobal.length>0) { const tb = document.getElementById('tabelaPreviewSkuData'); if(tb) { tb.innerHTML = ''; let limit = Math.min(3, skusParaImportarGlobal.length); for(let i=0; i<limit; i++) { let item = skusParaImportarGlobal[i]; tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50"><td class="p-4 font-mono text-[10px] font-bold text-gray-500">${item.sku}</td><td class="p-4 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${item.produto}">${item.produto}</td><td class="p-4 text-right font-extrabold text-red-500">${formatMoney(item.custo_atual)}</td></tr>`; } } esconderLoading(); const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.remove('hidden'); } else { throw new Error("Nenhum dado válido."); } } catch(err){ esconderLoading(); showToast(err.message, "error"); } finally{ const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value=''; } }, (err) => { esconderLoading(); showToast("Erro ao ler arquivo: " + err.message, "error"); }); }
 async function confirmarImportacaoSkus() { const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.add('hidden'); mostrarLoading("Sincronizando no Supabase..."); try { const { error } = await db.from('custos_sku').upsert(skusParaImportarGlobal, {onConflict:'sku'}); if(error) throw new Error(error.message); await carregarDadosIniciais(); showToast(skusParaImportarGlobal.length + " SKUs importados com sucesso!", "success"); skusParaImportarGlobal = []; } catch(e) { showToast(e.message, "error"); } finally { esconderLoading(); } }
-
-function renderPaginaSkus(p) { 
-    const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; 
-    skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b)); 
-    const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; 
-    const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML=''; 
-    skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => { 
-        let isActive = String(s.STATUS).trim().toUpperCase() !== "INATIVO"; 
-        let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"; 
-        let safeSku = String(s.SKU || "").replace(/'/g,"\\'");
-        const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; 
-        tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${safeSku}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${safeSku}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; 
-        if(tb) tb.appendChild(tr); 
-    }); 
-    const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; 
-    const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp; 
-    const btnP = document.getElementById('btnPrevSkus'); if(btnP) btnP.disabled=paginaAtualSkus===1; 
-    const btnN = document.getElementById('btnNextSkus'); if(btnN) btnN.disabled=paginaAtualSkus===tp; 
-    aplicarPermissoes();
-}
-
-function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
-function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
-async function deletarSku(skuCode) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; if(!confirm(`Tem certeza que deseja apagar o produto SKU: ${skuCode}?`)) return; mostrarLoading("Apagando SKU..."); try { await db.from('custos_sku').delete().eq('sku', skuCode); await carregarDadosIniciais(); showToast("SKU Excluído!","success"); } catch(e) { showToast("Erro ao excluir", "error"); } finally { esconderLoading(); } }
