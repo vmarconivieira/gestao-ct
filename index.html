@@ -12,9 +12,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css?v=1.6">
+    <link rel="stylesheet" href="style.css?v=1.7">
 </head>
 <body class="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 text-gray-800 dark:from-gray-900 dark:via-gray-800 dark:to-slate-900 dark:text-gray-100 min-h-screen p-3 sm:p-5 transition-colors duration-500">
+
+    <!-- AVISO OFFLINE (Escondido por padrão) -->
+    <div id="offlineWarning" class="hidden fixed top-0 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-5 py-2 rounded-b-xl shadow-lg text-sm font-bold z-[300] flex items-center gap-3 transition-all animate-fade-in">
+        <span>⚠️ Sem conexão com o servidor</span>
+        <button onclick="carregarDadosIniciais()" class="bg-red-800 hover:bg-red-900 px-3 py-1 rounded-lg transition-colors text-xs">Tentar novamente</button>
+    </div>
 
     <div id="toast-container"></div>
 
@@ -182,17 +188,17 @@
                 <button onclick="fecharModalSenha()" class="text-gray-400 hover:text-red-500 text-2xl font-bold transition-colors">&times;</button>
             </div>
             <form id="formAlterarSenha" class="flex flex-col gap-4">
-                <div>
+                <div class="hidden" id="boxSenhaAtual">
                     <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Senha Atual</label>
-                    <input type="password" id="senhaAtual" required class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
+                    <input type="password" id="senhaAtual" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
                 </div>
                 <div>
                     <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Nova Senha</label>
-                    <input type="password" id="senhaNova" required minlength="4" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
+                    <input type="password" id="senhaNova" required minlength="6" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
                 </div>
                 <div>
                     <label class="text-xs font-bold text-gray-500 dark:text-gray-400">Confirmar Nova</label>
-                    <input type="password" id="senhaNovaConfirma" required minlength="4" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
+                    <input type="password" id="senhaNovaConfirma" required minlength="6" class="w-full p-3 mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm font-bold">
                 </div>
                 <button type="submit" class="w-full mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:-translate-y-1">Confirmar</button>
             </form>
@@ -271,12 +277,6 @@
         <header class="glass-panel p-4 md:p-6 rounded-3xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-4 animate-fade-in">
             <div class="text-center md:text-left flex items-center gap-4">
                 <img src="logo.png" alt="C&T" class="h-16 sm:h-20 w-auto object-contain">
-                <div class="flex flex-col justify-center">
-                    <div class="flex items-center gap-2 mt-1">
-                        <span id="statusConexao" class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm" title="Sistema Online"></span>
-                        <button onclick="carregarDadosIniciais()" class="bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-lg p-1.5 transition-colors shadow-sm text-xs flex items-center justify-center" title="Sincronizar Dados">🔄</button>
-                    </div>
-                </div>
             </div>
             <div class="flex flex-wrap justify-center items-center gap-2">
                 <div class="flex flex-col items-end mr-2 hidden md:flex">
@@ -369,7 +369,7 @@
                                 <th class="p-4">Período</th>
                                 <th class="p-4">Cód. Produto</th>
                                 <th class="p-4 w-1/4">Descrição</th>
-                                <th class="p-4 text-center">Status</th>
+                                <th class="p-4 text-center w-32">Status</th>
                                 <th class="p-4 text-center">Canal</th>
                                 <th class="p-4 text-center">Qtd</th>
                                 <th class="p-4 text-right">Bruto</th>
@@ -828,6 +828,6 @@
         </div>
     </div>
     
-    <script src="app.js?v=1.6" defer></script>
+    <script src="app.js?v=1.7" defer></script>
 </body>
 </html>
