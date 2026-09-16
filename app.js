@@ -6,14 +6,13 @@ try { db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
 catch(e) { console.error("Falha ao inicializar o Supabase:", e); }
 
 let vendasGlobais=[], vendasFiltradasGlobal=[], catalogoSkusGlobais=[], skusFiltradosGlobal=[], catalogoSkus={}; 
-let usuariosGlobais=[], tarefasKanban=[], graficoInstance=null, chartAnalise=null, isDarkMode=false, isFetching=false;
+let tarefasKanban=[], graficoInstance=null, chartAnalise=null, isDarkMode=false, isFetching=false;
 let paginaAtualVendas=1, paginaAtualSkus=1; const ITENS_POR_PAGINA=50;
 let rawDataGlobal=[], importDataGlobal=[], importHeadersGlobal=[], produtosUnicosGlobal=[], skusParaImportarGlobal=[];
 let debounceBuscaTimer=null; 
 
 function fixText(s) { if(!s || typeof s !== 'string') return s; try { return decodeURIComponent(escape(s)); } catch(e) { return s; } }
 function lerPlanilha(f, cb, errCb) { try { if (f.name.toLowerCase().endsWith('.csv') || f.name.toLowerCase().endsWith('.txt')) { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(ev.target.result,{type:'string'}));}catch(err){errCb(err);} }; r.readAsText(f, 'windows-1252'); } else { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(new Uint8Array(ev.target.result),{type:'array'}));}catch(err){errCb(err);} }; r.readAsArrayBuffer(f); } } catch(err) { errCb(err); } }
-async function hashSHA256(str) { if (window.crypto && window.crypto.subtle) { try { const buf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)); return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join(''); } catch(e) { return btoa(unescape(encodeURIComponent(str))); } } else { return btoa(unescape(encodeURIComponent(str))); } }
 
 function showToast(m, t='info') { const c = document.getElementById('toast-container'); if(!c) return; const toast = document.createElement('div'); toast.className = `toast ${t}`; toast.innerHTML = `<span>${m}</span>`; c.appendChild(toast); setTimeout(() => { toast.style.animation = 'fadeOut 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000); }
 function mostrarLoading(t="Processando...") { const ot = document.getElementById('globalOverlayText'); if(ot) ot.innerText = t; const go = document.getElementById('globalOverlay'); if(go) go.classList.remove('hidden'); }
@@ -23,25 +22,125 @@ function formatMoney(val) { const n=Number(val)||0; return (n<0?'-':'')+`R$ ${Ma
 const universalNumberParse = (val) => { if(!val) return 0; if(typeof val==='number') return val; let s=String(val).trim(); const neg = s.includes('-')||(s.startsWith('(')&&s.endsWith(')')); s=s.replace(/[^0-9.,]/g,''); if(!s) return 0; const lc=s.lastIndexOf(','), ld=s.lastIndexOf('.'); if(lc>ld) s=s.replace(/\./g,'').replace(',','.'); else if(ld>lc && lc!==-1) s=s.replace(/,/g,''); return neg ? -Math.abs(parseFloat(s)||0) : Math.abs(parseFloat(s)||0); };
 
 function aplicarPermissoes() { const nivel = localStorage.getItem('app_auth_nivel') || 'OPERADOR'; document.querySelectorAll('.admin-only').forEach(el => { el.style.display = (nivel !== 'ADMIN') ? 'none' : ''; }); const nt = document.getElementById('nivelText'); if(nt) { nt.innerText = nivel === 'ADMIN' ? "👑 ADMIN" : "👤 OPERADOR"; nt.className = nivel === 'ADMIN' ? "text-[10px] font-extrabold px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" : "text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"; } }
-async function testarConexaoLogin() { const dot=document.getElementById('loginStatusDot'), txt=document.getElementById('loginStatusText'), btn=document.getElementById('btnLogin'); if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"; if(txt) txt.innerText="Testando conexão..."; if(btn) btn.disabled=true; try { if(!window.supabase) throw new Error("Supabase não carregado."); const {error} = await db.from('usuarios').select('id').limit(1); if(error) throw error; if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText="Sistema Online"; if(btn) { btn.disabled=false; btn.classList.remove('opacity-50','cursor-not-allowed'); } } catch(e) { if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2"; if(txt) txt.innerText="Erro: "+e.message; setTimeout(testarConexaoLogin, 6000); } }
 
-document.addEventListener('DOMContentLoaded', () => {
+async function testarConexaoLogin() { 
+    const dot=document.getElementById('loginStatusDot'), txt=document.getElementById('loginStatusText'), btn=document.getElementById('btnLogin'); 
+    if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-yellow-400 mr-2 animate-pulse"; if(txt) txt.innerText="Testando conexão..."; if(btn) btn.disabled=true; 
+    try { 
+        if(!window.supabase) throw new Error("Supabase não carregado."); 
+        const { error } = await db.from('perfis').select('id').limit(1); 
+        if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText="Sistema Online (Auth Pronto)"; if(btn) { btn.disabled=false; btn.classList.remove('opacity-50','cursor-not-allowed'); } 
+    } catch(e) { 
+        if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2"; if(txt) txt.innerText="Aguardando DB..."; setTimeout(testarConexaoLogin, 6000); 
+    } 
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
     inicializarTema(); configurarDataAtual();
-    const token = localStorage.getItem('app_auth_token'), userName = localStorage.getItem('app_auth_name');
-    if (token) { const ls = document.getElementById('loginScreen'); if(ls) ls.classList.add('hidden'); const ac = document.getElementById('appContent'); if(ac) ac.classList.remove('hidden'); const bv = document.getElementById('bemVindoText'); if(userName && bv) bv.innerText = `Olá, ${userName}`; aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais(); } 
-    else { const ls = document.getElementById('loginScreen'); if(ls) ls.classList.remove('hidden'); const ac = document.getElementById('appContent'); if(ac) ac.classList.add('hidden'); testarConexaoLogin(); }
     
+    // Limpeza automática da aba Equipe antiga
+    const tabEq = document.getElementById('tab-usuarios');
+    const btnEq = document.getElementById('btn-tab-usuarios');
+    if(tabEq) tabEq.remove();
+    if(btnEq) btnEq.remove();
+
+    // Verificação de Sessão via Supabase Auth
+    const { data: { session } } = await db.auth.getSession();
+    if (session) {
+        const { data: perfis } = await db.from('perfis').select('*').eq('id', session.user.id).single();
+        if(perfis) {
+            localStorage.setItem('app_auth_name', perfis.nome);
+            localStorage.setItem('app_auth_nivel', perfis.nivel);
+            const ls = document.getElementById('loginScreen'); if(ls) ls.classList.add('hidden'); 
+            const ac = document.getElementById('appContent'); if(ac) ac.classList.remove('hidden'); 
+            const bv = document.getElementById('bemVindoText'); if(bv) bv.innerText = `Olá, ${perfis.nome}`; 
+            aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
+        } else {
+            document.getElementById('loginScreen').classList.remove('hidden');
+        }
+    } else {
+        document.getElementById('loginScreen').classList.remove('hidden'); 
+        document.getElementById('appContent').classList.add('hidden'); 
+        testarConexaoLogin();
+    }
+    
+    // NOVO MOTOR DE LOGIN (SUPABASE AUTH)
     const formLogin = document.getElementById('formLogin');
-    if(formLogin) { formLogin.addEventListener('submit', async function(e) { e.preventDefault(); const btn=document.getElementById('btnLogin'), spinner=document.getElementById('loginSpinner'); if(btn) btn.classList.add('hidden'); if(spinner) spinner.classList.remove('hidden'); const u=(document.getElementById('loginUser')?.value||'').trim().toLowerCase(), p=(document.getElementById('loginPass')?.value||'').trim(); try { const hp = await hashSHA256(p); const { count } = await db.from('usuarios').select('*', { count: 'exact', head: true }); if (count === 0 && u === 'admin' && p === 'admin') await db.from('usuarios').insert([{ usuario: 'admin', senha: hp, nome: 'Administrador', nivel: 'ADMIN' }]); const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hp); if (data && data.length > 0) { const ud = data[0]; localStorage.setItem('app_auth_token', ud.senha); localStorage.setItem('app_auth_name', ud.nome); localStorage.setItem('app_auth_nivel', ud.nivel); localStorage.setItem('app_auth_login', ud.usuario); document.getElementById('loginScreen').classList.add('hidden'); document.getElementById('appContent').classList.remove('hidden'); const bv = document.getElementById('bemVindoText'); if(bv) bv.innerText = `Olá, ${ud.nome}`; aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais(); showToast('Login efetuado!', 'success'); } else { alert("Acesso negado."); if(btn) btn.classList.remove('hidden'); if(spinner) spinner.classList.add('hidden'); } } catch (err) { alert("Erro servidor."); if(btn) btn.classList.remove('hidden'); if(spinner) spinner.classList.add('hidden'); } }); }
+    if(formLogin) { 
+        formLogin.addEventListener('submit', async function(e) { 
+            e.preventDefault(); 
+            const btn=document.getElementById('btnLogin'), spinner=document.getElementById('loginSpinner'); 
+            if(btn) btn.classList.add('hidden'); if(spinner) spinner.classList.remove('hidden'); 
+            const u=(document.getElementById('loginUser')?.value||'').trim().toLowerCase();
+            const p=(document.getElementById('loginPass')?.value||'').trim(); 
+            const email = u.includes('@') ? u : `${u}@ct.local`;
+
+            try { 
+                const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email, password: p });
+                if (authErr) throw authErr;
+                
+                const { data: perfis, error: pErr } = await db.from('perfis').select('*').eq('id', authData.user.id).single();
+                if (pErr) throw pErr;
+
+                localStorage.setItem('app_auth_name', perfis.nome);
+                localStorage.setItem('app_auth_nivel', perfis.nivel);
+                localStorage.setItem('app_auth_login', u);
+                
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('appContent').classList.remove('hidden');
+                const bv = document.getElementById('bemVindoText');
+                if(bv) bv.innerText = `Olá, ${perfis.nome}`;
+                aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
+                showToast('Login efetuado com sucesso!', 'success');
+            } catch (err) { 
+                showToast("Acesso negado: Credenciais inválidas.", "error"); 
+                if(btn) btn.classList.remove('hidden'); if(spinner) spinner.classList.add('hidden'); 
+            } 
+        }); 
+    }
 
     document.querySelectorAll('.form-draft').forEach(el => { el.addEventListener('input', salvarRascunhoForm); el.addEventListener('change', salvarRascunhoForm); });
     const skuEl = document.getElementById('sku'); if (skuEl) { skuEl.addEventListener('blur', function() { const codigo = this.value.trim().toUpperCase(); if(codigo && catalogoSkus[codigo]) { const d = document.getElementById('descricao'); if(d) d.value = catalogoSkus[codigo].produto; const c = document.getElementById('custo'); if(c) c.value = catalogoSkus[codigo].custo_atual; calcularMargemForm(); showToast('SKU Localizado!', 'success'); } }); }
 
+    // MUDANÇA DE SENHA OFICIAL DO SUPABASE
     const formAltSenha = document.getElementById('formAlterarSenha');
-    if(formAltSenha) { formAltSenha.addEventListener('submit', async function(e) { e.preventDefault(); const sa = document.getElementById('senhaAtual').value.trim(), sn = document.getElementById('senhaNova').value.trim(), sc = document.getElementById('senhaNovaConfirma').value.trim(); if (sn !== sc) return showToast("Senhas não conferem.", "error"); if (sn.length < 4) return showToast("Mínimo 4 caracteres.", "error"); mostrarLoading("Alterando..."); try { const u = localStorage.getItem('app_auth_login'), ha = await hashSHA256(sa); const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', ha); if (data && data.length > 0) { const hn = await hashSHA256(sn); await db.from('usuarios').update({ senha: hn }).eq('usuario', u); localStorage.setItem('app_auth_token', hn); showToast("Senha alterada!", 'success'); fecharModalSenha(); } else showToast("Senha atual incorreta.", 'error'); } catch (err) { showToast("Erro.", "error"); } finally { esconderLoading(); } }); }
+    if(formAltSenha) { formAltSenha.addEventListener('submit', async function(e) { 
+        e.preventDefault(); 
+        const sn = document.getElementById('senhaNova').value.trim(), sc = document.getElementById('senhaNovaConfirma').value.trim(); 
+        if (sn !== sc) return showToast("As senhas não conferem.", "error"); 
+        if (sn.length < 6) return showToast("A senha precisa ter no mínimo 6 caracteres.", "error"); 
+        mostrarLoading("Alterando sua senha..."); 
+        try { 
+            const { error } = await db.auth.updateUser({ password: sn });
+            if (error) throw error;
+            showToast("Senha alterada com segurança!", 'success'); 
+            fecharModalSenha(); 
+        } catch (err) { 
+            showToast("Erro: " + err.message, "error"); 
+        } finally { esconderLoading(); } 
+    }); }
 
+    // EXCLUSÃO DE MÊS COM RE-AUTENTICAÇÃO
     const formExcMes = document.getElementById('formExcluirMes');
-    if(formExcMes) { formExcMes.addEventListener('submit', async function(e) { e.preventDefault(); const a = document.getElementById('delMesAno').value, m = document.getElementById('delMesNome').value, s = document.getElementById('delMesSenha').value.trim(); if(!confirm(`⚠️ ATENÇÃO: Apagar TODOS os lançamentos de ${m}/${a}?`)) return; mostrarLoading("Apagando mês..."); try { const u = localStorage.getItem('app_auth_login'), hs = await hashSHA256(s); const { data } = await db.from('usuarios').select('*').eq('usuario', u).eq('senha', hs); if (data && data.length > 0 && data[0].nivel === 'ADMIN') { const { error } = await db.from('vendas').delete().eq('ano', a).ilike('mes', m); if(!error) { showToast("Mês excluído com sucesso!", 'success'); fecharModalExcluirMes(); await buscarVendasServidor(); } else throw error; } else { showToast("Senha ADMIN incorreta.", 'error'); } } catch (err) { showToast("Erro: " + err.message, "error"); } finally { esconderLoading(); } }); }
+    if(formExcMes) { formExcMes.addEventListener('submit', async function(e) { 
+        e.preventDefault(); 
+        const a = document.getElementById('delMesAno').value, m = document.getElementById('delMesNome').value, s = document.getElementById('delMesSenha').value.trim(); 
+        if(!confirm(`⚠️ ATENÇÃO: Apagar TODOS os lançamentos de ${m}/${a}?`)) return; 
+        mostrarLoading("Verificando credenciais..."); 
+        try { 
+            const u = localStorage.getItem('app_auth_login') || '';
+            const email = u.includes('@') ? u : `${u}@ct.local`;
+            const { error: authErr } = await db.auth.signInWithPassword({ email, password: s });
+            if (authErr) throw new Error("Senha ADMIN incorreta.");
+
+            if (localStorage.getItem('app_auth_nivel') === 'ADMIN') { 
+                const { error } = await db.from('vendas').delete().eq('ano', a).ilike('mes', m); 
+                if(error) throw error; 
+                showToast("Mês excluído com sucesso!", 'success'); 
+                fecharModalExcluirMes(); await buscarVendasServidor(); 
+            } else { throw new Error("Usuário não possui nível ADMIN."); } 
+        } catch (err) { showToast(err.message, "error"); } finally { esconderLoading(); } 
+    }); }
     
     const vendaF = document.getElementById('vendaForm');
     if(vendaF) { vendaF.addEventListener('submit', async function(e) { e.preventDefault(); mostrarLoading("Salvando..."); const q=Number(document.getElementById('quantidade').value)||1, v=Number(document.getElementById('valorUnitario').value)||0, i=Number(document.getElementById('imposto').value)||0, c=Number(document.getElementById('custo').value)||0, pt=document.getElementById('plataforma').value, nv=document.getElementById('nVenda').value; let original_nv = nv || `MANUAL-${Math.random().toString(36).substr(2, 5).toUpperCase()}`; const l=document.getElementById('urlPlataforma').value || (nv&&pt.includes('Mercado')?`https://www.mercadolivre.com.br/vendas/${original_nv}/detalhe`:''); const t=q*v, s=t-(q*i), lu=s-(q*c); const p={ ano:document.getElementById('ano').value, mes:document.getElementById('mes').value, quantidade:q, descricao:document.getElementById('descricao').value, n_venda:original_nv, plataforma:pt, url_ml:l, valor_venda:t, sobra:s, imposto:(q*i), custo:(q*c), lucro:lu, porcentagem:(t>0?(lu/t):0), sku:document.getElementById('sku').value, status:'Concluído', estorno:0 }; try { const { error } = await db.from('vendas').upsert([p], {onConflict:'plataforma,n_venda'}); if(error) throw error; limparRascunho(); await buscarVendasServidor(); switchTab('dashboard'); showToast('Salvo!', 'success'); } catch(er){showToast("Erro: " + er.message, "error");} finally {esconderLoading();} }); }
@@ -53,11 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if(kDesc) {
         kDesc.addEventListener('keyup', (e) => {
             const val = kDesc.value;
-            if(val.endsWith('/')) {
-                document.getElementById('slashMenu').classList.remove('hidden');
-            } else if (!val.includes('/')) {
-                document.getElementById('slashMenu').classList.add('hidden');
-            }
+            if(val.endsWith('/')) { document.getElementById('slashMenu').classList.remove('hidden'); } else if (!val.includes('/')) { document.getElementById('slashMenu').classList.add('hidden'); }
         });
     }
 
@@ -71,25 +166,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const descricao = document.getElementById('kanban_descricao').value;
             const prioridade = document.getElementById('kanban_prioridade').value;
             try {
-                if (kId) {
-                    await db.from('kanban').update({ titulo, descricao, prioridade }).eq('id', kId);
-                } else {
-                    await db.from('kanban').insert([{ titulo, descricao, prioridade, status: 'A Fazer' }]);
-                }
-                fecharModalKanban();
-                fKanban.reset();
-                await buscarKanban();
-                showToast("Tarefa salva!", "success");
-            } catch(er) {
-                showToast("Falha ao salvar", "error");
-            } finally {
-                esconderLoading();
-            }
+                if (kId) { await db.from('kanban').update({ titulo, descricao, prioridade }).eq('id', kId); } else { await db.from('kanban').insert([{ titulo, descricao, prioridade, status: 'A Fazer' }]); }
+                fecharModalKanban(); fKanban.reset(); await buscarKanban(); showToast("Tarefa salva!", "success");
+            } catch(er) { showToast("Falha ao salvar", "error"); } finally { esconderLoading(); }
         });
     }
 });
 
-function fazerLogout() { localStorage.clear(); location.reload(); }
+async function fazerLogout() { await db.auth.signOut(); localStorage.clear(); location.reload(); }
 function abrirModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.remove('hidden'); const f = document.getElementById('formAlterarSenha'); if(f) f.reset(); }
 function fecharModalSenha() { const m = document.getElementById('modalSenha'); if(m) m.classList.add('hidden'); }
 function abrirModalExcluirMes() { const m = document.getElementById('modalExcluirMes'); if(m) m.classList.remove('hidden'); const da = document.getElementById('delMesAno'); if(da) da.value = new Date().getFullYear(); }
@@ -289,7 +373,21 @@ async function deletarTarefaKanban(id) {
     } catch(e) {}
 }
 
-async function carregarDadosIniciais() { mostrarLoading("Sincronizando DB..."); try { const [sR, uR] = await Promise.all([ db.from('custos_sku').select('*'), db.from('usuarios').select('*') ]); if (sR.data) { catalogoSkusGlobais = sR.data.map(s => ({ SKU: s.sku, PRODUTO: s.produto, CUSTO_ANTERIOR: s.custo_anterior, CUSTO_ATUAL: s.custo_atual, CUSTO_MEDIO: s.custo_medio, FORNECEDOR: s.fornecedor, DATA_ATUALIZACAO: s.data_atualizacao, STATUS: s.status })); parseSkusDictionary(); renderPaginaSkus(1); } if (uR.data) { usuariosGlobais = uR.data.map(u => ({ usuario: u.usuario, nome: u.nome, nivel: u.nivel, originalIndex: u.id })); renderTabelaUsuarios(); } await buscarVendasServidor(); await buscarKanban(); const ind = document.getElementById('statusConexao'), txt = document.getElementById('textoConexao'); if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm"; if(txt) txt.innerText = `Online`; } catch (e) { showToast("Falha na sincronização: " + (e.message || e), "error"); } finally { esconderLoading(); } }
+async function carregarDadosIniciais() { 
+    mostrarLoading("Sincronizando DB..."); 
+    try { 
+        const sR = await db.from('custos_sku').select('*'); 
+        if (sR.data) { 
+            catalogoSkusGlobais = sR.data.map(s => ({ SKU: s.sku, PRODUTO: s.produto, CUSTO_ANTERIOR: s.custo_anterior, CUSTO_ATUAL: s.custo_atual, CUSTO_MEDIO: s.custo_medio, FORNECEDOR: s.fornecedor, DATA_ATUALIZACAO: s.data_atualizacao, STATUS: s.status })); 
+            parseSkusDictionary(); renderPaginaSkus(1); 
+        } 
+        await buscarVendasServidor(); 
+        await buscarKanban(); 
+        const ind = document.getElementById('statusConexao'), txt = document.getElementById('textoConexao'); 
+        if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm"; 
+        if(txt) txt.innerText = `Online`; 
+    } catch (e) { showToast("Falha na sincronização", "error"); } finally { esconderLoading(); } 
+}
 
 function aplicarFiltrosLocais() { const fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas'); const o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : ""; vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b) || String(v.status).toLowerCase().includes(b)); if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro); atualizarCardsPainel(vendasFiltradasGlobal); atualizarGrafico(vendasFiltradasGlobal); carregarFiltroAnalise(); paginaAtualVendas=1; renderPaginaVendas(1); }
 function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
@@ -297,15 +395,15 @@ function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
 function renderPaginaVendas(p) { const tp=Math.ceil(vendasFiltradasGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualVendas=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaVendas'); if(tb) tb.innerHTML=''; const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA); if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="13" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; } i.forEach(v => { let isAuto = v.nVenda.includes('MANUAL-') || v.nVenda.includes('AUTO-') || v.nVenda.includes('SYS-'); let display_nv = isAuto ? 'Lançamento' : (v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda); const l = v.urlPlataforma ? `<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${display_nv} ↗</a>` : display_nv; const sLow = String(v.status).toLowerCase(); let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'); let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold"); const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 text-xs text-gray-500">${String(v.mes).substring(0,3)}/${v.ano}</td><td class="p-4 font-mono text-[10px] font-bold text-gray-400">${v.sku || '-'}</td><td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td><td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td><td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td><td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td><td class="p-4 text-right text-orange-500 font-semibold">${formatMoney(v.imposto)}</td><td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td><td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td><td class="p-4 text-right ${corMargem}">${(v.porcentagem || 0).toFixed(2)}%</td><td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="abrirModalEditarVenda('${v.originalIndex}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; if(tb) tb.appendChild(tr); }); const lblP = document.getElementById('lblPaginaVendas'); if(lblP) lblP.innerText=paginaAtualVendas; const lblT = document.getElementById('lblTotalPaginasVendas'); if(lblT) lblT.innerText=tp; const btnP = document.getElementById('btnPrevVendas'); if(btnP) btnP.disabled=paginaAtualVendas===1; const btnN = document.getElementById('btnNextVendas'); if(btnN) btnN.disabled=paginaAtualVendas===tp; }
 
 function switchTab(id) { 
-    ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise', 'kanban'].forEach(t => { 
+    ['dashboard', 'novo', 'calculadora', 'skus', 'analise', 'kanban'].forEach(t => { 
         const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); 
         if(el) el.classList.add('hidden'); 
-        if(bt) bt.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float " + (['usuarios','novo'].includes(t)?'admin-only':''); 
+        if(bt) bt.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float " + (['novo'].includes(t)?'admin-only':''); 
     }); 
     const selTab = document.getElementById('tab-'+id); 
     if(selTab) selTab.classList.remove('hidden'); 
     const selBtn = document.getElementById('btn-tab-'+id); 
-    if(selBtn) selBtn.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float " + (['usuarios','novo'].includes(id)?'admin-only':''); 
+    if(selBtn) selBtn.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float " + (['novo'].includes(id)?'admin-only':''); 
     aplicarPermissoes(); 
 }
 function toggleGrafico() { const gc = document.getElementById('graficoContainer'); if(gc) gc.classList.toggle('hidden'); }
@@ -420,17 +518,7 @@ async function processarEnvioEmLote() { mostrarLoading("Sincronizando Lote...");
 function importarCsvSkus(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Lendo Arquivo de SKUs..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados."); const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase()); const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO")); if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido."); const mapSkus = {}; for(let i=1;i<rawData.length;i++){ const row = rawData[i]; if(row.filter(c=>String(c).trim()!=="").length === 0) continue; let prodName = iP>-1 ? fixText(String(row[iP])).trim() : ''; let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase(); if(!skuCode) continue; let valStr = iC>-1 ? row[iC] : 0; mapSkus[skuCode] = { sku: skuCode, produto: prodName || skuCode, custo_atual: universalNumberParse(valStr), status:'Ativo' }; } skusParaImportarGlobal = Object.values(mapSkus); if(skusParaImportarGlobal.length>0) { const tb = document.getElementById('tabelaPreviewSkuData'); if(tb) { tb.innerHTML = ''; let limit = Math.min(3, skusParaImportarGlobal.length); for(let i=0; i<limit; i++) { let item = skusParaImportarGlobal[i]; tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50"><td class="p-4 font-mono text-[10px] font-bold text-gray-500">${item.sku}</td><td class="p-4 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${item.produto}">${item.produto}</td><td class="p-4 text-right font-extrabold text-red-500">${formatMoney(item.custo_atual)}</td></tr>`; } } esconderLoading(); const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.remove('hidden'); } else { throw new Error("Nenhum dado válido."); } } catch(err){ esconderLoading(); showToast(err.message, "error"); } finally{ const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value=''; } }, (err) => { esconderLoading(); showToast("Erro ao ler arquivo: " + err.message, "error"); }); }
 async function confirmarImportacaoSkus() { const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.add('hidden'); mostrarLoading("Sincronizando no Supabase..."); try { const { error } = await db.from('custos_sku').upsert(skusParaImportarGlobal, {onConflict:'sku'}); if(error) throw new Error(error.message); await carregarDadosIniciais(); showToast(skusParaImportarGlobal.length + " SKUs importados com sucesso!", "success"); skusParaImportarGlobal = []; } catch(e) { showToast(e.message, "error"); } finally { esconderLoading(); } }
 
-function renderPaginaSkus(p) { const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b)); const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML=''; skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => { let isActive = String(s.STATUS).trim().toUpperCase() !== "INATIVO"; let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"; const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; if(tb) tb.appendChild(tr); }); const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp; const btnP = document.getElementById('btnPrevSkus'); if(btnP) btnP.disabled=paginaAtualSkus===1; const btnN = document.getElementById('btnNextSkus'); if(btnN) btnN.disabled=paginaAtualSkus===tp; aplicarPermissoes(); }
+function renderPaginaSkus(p) { const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b)); const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML=''; skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => { let isActive = String(s.STATUS).trim().toUpperCase() !== "INATIVO"; let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"; const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; if(tb) tb.appendChild(tr); }); const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp; const btnP = document.getElementById('btnPrevSkus'); if(btnP) btnP.disabled=paginaAtualSkus===1; const btnN = document.getElementById('btnNextSkus'); if(btnN) btnN.disabled=paginaAtualSkus===tp; }
 function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
 function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
 async function deletarSku(skuCode) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; if(!confirm(`Tem certeza que deseja apagar o produto SKU: ${skuCode}?`)) return; mostrarLoading("Apagando SKU..."); try { await db.from('custos_sku').delete().eq('sku', skuCode); await carregarDadosIniciais(); showToast("SKU Excluído!","success"); } catch(e) { showToast("Erro ao excluir", "error"); } finally { esconderLoading(); } }
-
-const formSku = document.getElementById('formCadastroSku');
-if(formSku) { formSku.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await db.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value, produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, custo_medio:document.getElementById('skuForm_custoMedio').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosIniciais(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} }); }
-
-function renderTabelaUsuarios() { const tb=document.getElementById('tabelaUsuarios'); if(!tb) return; tb.innerHTML=''; usuariosGlobais.forEach(u => { const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 font-bold text-gray-800 dark:text-gray-200 font-mono">${u.usuario}</td><td class="p-4 text-gray-700 dark:text-gray-300">${u.nome}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${u.nivel==='ADMIN'?'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300':'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'}">${u.nivel}</span></td><td class="p-4 text-center"><button onclick="editarUsuario('${u.usuario}','${u.nome}','${u.nivel}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarUsuario('${u.originalIndex}','${u.usuario}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; tb.appendChild(tr); }); }
-function editarUsuario(u,n,l) { document.getElementById('userForm_user').value=u; document.getElementById('userForm_nome').value=n; document.getElementById('userForm_nivel').value=l; document.getElementById('userForm_senha').value=''; window.scrollTo(0,0); }
-
-const formUser = document.getElementById('formCadastroUser');
-if(formUser) { formUser.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { const u=document.getElementById('userForm_user').value.toLowerCase(), s=document.getElementById('userForm_senha').value; const p={usuario:u, nome:document.getElementById('userForm_nome').value, nivel:document.getElementById('userForm_nivel').value}; const {data}=await db.from('usuarios').select('id,senha').eq('usuario',u); if(s) p.senha=await hashSHA256(s); else if(data&&data.length>0) p.senha=data[0].senha; else p.senha=await hashSHA256(u); if(data&&data.length>0) await db.from('usuarios').update(p).eq('id',data[0].id); else await db.from('usuarios').insert([p]); document.getElementById('formCadastroUser').reset(); await carregarDadosIniciais(); showToast("Salvo!","success"); } catch(er){} finally{esconderLoading();} }); }
-async function deletarUsuario(id,u) { if(u===localStorage.getItem('app_auth_login'))return showToast("Você não pode se excluir.","error"); if(!confirm("Apagar?"))return; mostrarLoading(); try { await db.from('usuarios').delete().eq('id',id); await carregarDadosIniciais(); } catch(e){} finally{esconderLoading();} }
