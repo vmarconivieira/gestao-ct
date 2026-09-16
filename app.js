@@ -235,6 +235,208 @@ async function buscarVendasServidor() {
         if (offlineWarning) offlineWarning.classList.remove('hidden');
     } finally { esconderLoading(); } 
 }
+
+//SEGUNDA PARTE DO CODIGO
+// ==========================================
+// KANBAN LOGIC & EDITOR
+// ==========================================
+
+function abrirModalKanban() { 
+    document.getElementById('kanban_id').value = ''; 
+    document.getElementById('formKanban').reset();
+    document.getElementById('kanbanModalTitle').innerHTML = '<span class="mr-2">📋</span> Nova Tarefa';
+    document.getElementById('modalKanban').classList.remove('hidden'); 
+    document.getElementById('slashMenu').classList.add('hidden');
+}
+
+function fecharModalKanban() { document.getElementById('modalKanban').classList.add('hidden'); }
+
+function editarTarefaKanban(id) {
+    const t = tarefasKanban.find(x => x.id === id);
+    if(!t) return;
+    document.getElementById('kanban_id').value = t.id;
+    document.getElementById('kanban_titulo').value = t.titulo;
+    document.getElementById('kanban_descricao').value = t.descricao || '';
+    document.getElementById('kanban_prioridade').value = t.prioridade;
+    document.getElementById('kanbanModalTitle').innerHTML = '<span class="mr-2">✏️</span> Editar Tarefa';
+    document.getElementById('slashMenu').classList.add('hidden');
+    document.getElementById('modalKanban').classList.remove('hidden');
+}
+
+function fecharSlashMenu() { document.getElementById('slashMenu').classList.add('hidden'); }
+
+function insertTabela() {
+    const d = document.getElementById('kanban_descricao');
+    d.value = d.value.replace(/\/$/, '') + '\n| Produto | Status | Obs |\n| --- | --- | --- |\n| Item 1 | Pendente | - |\n';
+    fecharSlashMenu(); d.focus();
+}
+
+function triggerKanbanUpload(type) {
+    const fi = document.getElementById('fileUploadKanban');
+    fi.accept = type === 'image' ? 'image/*' : '*/*';
+    fi.click();
+    fecharSlashMenu();
+}
+
+function compressImage(file) {
+    return new Promise((resolve) => {
+        if (!file.type.startsWith('image/')) return resolve(file);
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = event => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX = 1000;
+                let w = img.width, h = img.height;
+                if (w > MAX) { h *= MAX / w; w = MAX; }
+                canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                canvas.toBlob(blob => resolve(new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".webp", { type: 'image/webp' })), 'image/webp', 0.8);
+            };
+        };
+    });
+}
+
+async function handleKanbanUpload(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+    mostrarLoading("Anexando Arquivo...");
+    try {
+        let finalFile = file;
+        if(file.type.startsWith('image/')) finalFile = await compressImage(file);
+        const fName = `kanban-${Date.now()}-${Math.random().toString(36).substring(2)}.${finalFile.name.split('.').pop()}`;
+        const { error } = await db.storage.from('kanban-anexos').upload(fName, finalFile);
+        if (error) throw error;
+        const { data } = db.storage.from('kanban-anexos').getPublicUrl(fName);
+        
+        const d = document.getElementById('kanban_descricao');
+        let md = file.type.startsWith('image/') ? `\n![Anexo](${data.publicUrl})\n` : `\n[📄 Abrir ${file.name}](${data.publicUrl})\n`;
+        d.value = d.value.replace(/\/$/, '') + md;
+        showToast("Arquivo Anexado!", "success");
+    } catch(err) {
+        showToast("Erro no anexo: " + err.message, "error");
+    } finally {
+        esconderLoading(); e.target.value = ''; document.getElementById('kanban_descricao').focus();
+    }
+}
+
+function parseMarkdown(text) {
+    if (!text) return '';
+    let html = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="w-full rounded-xl mt-3 mb-3 shadow-md border border-gray-200 dark:border-gray-700 object-cover">');
+    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">$1</a>');
+    
+    html = html.replace(/(href="|src=")?(https?:\/\/[^\s"<>]+)/g, function(match, prefix, url) {
+        if (prefix) return match; 
+        return '<a href="' + url + '" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all">' + url + '</a>';
+    });
+    
+    let lines = html.split('\n'), inTable = false, outHtml = '';
+    for(let line of lines) {
+        if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+            if (!inTable) { outHtml += '<div class="overflow-x-auto my-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><table class="w-full text-left text-xs whitespace-nowrap bg-white dark:bg-gray-800"><tbody class="divide-y divide-gray-200 dark:divide-gray-700">'; inTable = true; }
+            if (line.replace(/[\s\|-]/g, '') === '') continue; 
+            let cells = line.split('|').filter((_, i, arr) => i > 0 && i < arr.length - 1);
+            outHtml += '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">' + cells.map(c => `<td class="p-2 border-r border-gray-200 dark:border-gray-700 last:border-0">${c.trim()}</td>`).join('') + '</tr>';
+        } else {
+            if (inTable) { outHtml += '</tbody></table></div>'; inTable = false; }
+            outHtml += line + '\n';
+        }
+    }
+    if (inTable) outHtml += '</tbody></table></div>';
+    return outHtml;
+}
+
+async function buscarKanban() {
+    try {
+        const { data, error } = await db.from('kanban').select('*').order('created_at', { ascending: false });
+        if (!error && data) {
+            tarefasKanban = data;
+            renderKanban();
+        }
+    } catch (e) {
+        console.log("Kanban não iniciado ou tabela ausente.");
+    }
+}
+
+function renderKanban() {
+    const colunas = { 'A Fazer': [], 'Em Andamento': [], 'Concluído': [] };
+    tarefasKanban.forEach(t => { if(colunas[t.status]) colunas[t.status].push(t); });
+    
+    Object.keys(colunas).forEach(status => {
+        const divCol = document.getElementById(`coluna-${status.replace(/\s+/g, '-')}`);
+        const qtdCol = document.getElementById(`qtd-${status.toLowerCase().replace(/\s+/g, '-')}`);
+        if(!divCol) return;
+        divCol.innerHTML = '';
+        if(qtdCol) qtdCol.innerText = colunas[status].length;
+        
+        colunas[status].forEach(t => {
+            let corPrioridade = "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300";
+            let dot = "bg-blue-500";
+            if (t.prioridade === 'Alta') { corPrioridade = "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"; dot = "bg-red-500"; }
+            if (t.prioridade === 'Média') { corPrioridade = "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300"; dot = "bg-yellow-500"; }
+            
+            const dataStr = new Date(t.created_at).toLocaleDateString('pt-BR');
+            const descHtml = parseMarkdown(t.descricao || '');
+
+            divCol.innerHTML += `
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 cursor-move hover:shadow-md transition-all group" draggable="true" ondragstart="iniciarDrag(event, '${t.id}')">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 ${corPrioridade}"><span class="w-1.5 h-1.5 rounded-full ${dot}"></span> ${t.prioridade}</span>
+                        <div class="flex gap-2">
+                            <button onclick="editarTarefaKanban('${t.id}')" class="text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">✏️</button>
+                            <button onclick="deletarTarefaKanban('${t.id}')" class="text-gray-400 hover:text-red-500 admin-only opacity-0 group-hover:opacity-100 transition-opacity">🗑️</button>
+                        </div>
+                    </div>
+                    <h4 class="font-bold text-gray-800 dark:text-white text-sm mb-1">${t.titulo}</h4>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mb-3 whitespace-pre-wrap">${descHtml}</div>
+                    <div class="text-[9px] text-gray-400 font-bold text-right border-t border-gray-100 dark:border-gray-700 pt-2 mt-2">${dataStr}</div>
+                </div>
+            `;
+        });
+    });
+    aplicarPermissoes(); 
+}
+
+function iniciarDrag(e, id) { e.dataTransfer.setData('text/plain', id); }
+function permitirDrop(e) { e.preventDefault(); }
+async function soltarCartao(e, novoStatus) {
+    e.preventDefault();
+    const id = e.dataTransfer.getData('text/plain');
+    const index = tarefasKanban.findIndex(t => t.id === id);
+    if (index > -1 && tarefasKanban[index].status !== novoStatus) {
+        tarefasKanban[index].status = novoStatus;
+        renderKanban(); 
+        await db.from('kanban').update({ status: novoStatus }).eq('id', id);
+    }
+}
+
+async function deletarTarefaKanban(id) {
+    if(localStorage.getItem('app_auth_nivel') !== 'ADMIN') return;
+    if(!confirm("Excluir tarefa?")) return;
+    try {
+        await db.from('kanban').delete().eq('id', id);
+        await buscarKanban();
+        showToast("Tarefa removida", "success");
+    } catch(e) {}
+}
+
+async function carregarDadosIniciais() { 
+    mostrarLoading("Sincronizando DB..."); 
+    try { 
+        const sR = await db.from('custos_sku').select('*'); 
+        if (sR.data) { 
+            catalogoSkusGlobais = sR.data.map(s => ({ SKU: s.sku, PRODUTO: s.produto, CUSTO_ANTERIOR: s.custo_anterior, CUSTO_ATUAL: s.custo_atual, CUSTO_MEDIO: s.custo_medio, FORNECEDOR: s.fornecedor, DATA_ATUALIZACAO: s.data_atualizacao, STATUS: s.status })); 
+            parseSkusDictionary(); renderPaginaSkus(1); 
+        } 
+        await buscarVendasServidor(); 
+        await buscarKanban(); 
+    } catch (e) { showToast("Falha na sincronização", "error"); } finally { esconderLoading(); } 
+}
+
 function aplicarFiltrosLocais() { const fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas'); const o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : ""; vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b) || String(v.status).toLowerCase().includes(b)); if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro); atualizarCardsPainel(vendasFiltradasGlobal); atualizarGrafico(vendasFiltradasGlobal); carregarFiltroAnalise(); paginaAtualVendas=1; renderPaginaVendas(1); }
 function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
 
@@ -399,3 +601,4 @@ async function processarEnvioEmLote() { mostrarLoading("Sincronizando Lote...");
 
 function importarCsvSkus(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Lendo Arquivo de SKUs..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados."); const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase()); const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO")); if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido."); const mapSkus = {}; for(let i=1;i<rawData.length;i++){ const row = rawData[i]; if(row.filter(c=>String(c).trim()!=="").length === 0) continue; let prodName = iP>-1 ? fixText(String(row[iP])).trim() : ''; let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase(); if(!skuCode) continue; let valStr = iC>-1 ? row[iC] : 0; mapSkus[skuCode] = { sku: skuCode, produto: prodName || skuCode, custo_atual: universalNumberParse(valStr), status:'Ativo' }; } skusParaImportarGlobal = Object.values(mapSkus); if(skusParaImportarGlobal.length>0) { const tb = document.getElementById('tabelaPreviewSkuData'); if(tb) { tb.innerHTML = ''; let limit = Math.min(3, skusParaImportarGlobal.length); for(let i=0; i<limit; i++) { let item = skusParaImportarGlobal[i]; tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50"><td class="p-4 font-mono text-[10px] font-bold text-gray-500">${item.sku}</td><td class="p-4 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${item.produto}">${item.produto}</td><td class="p-4 text-right font-extrabold text-red-500">${formatMoney(item.custo_atual)}</td></tr>`; } } esconderLoading(); const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.remove('hidden'); } else { throw new Error("Nenhum dado válido."); } } catch(err){ esconderLoading(); showToast(err.message, "error"); } finally{ const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value=''; } }, (err) => { esconderLoading(); showToast("Erro ao ler arquivo: " + err.message, "error"); }); }
 async function confirmarImportacaoSkus() { const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.add('hidden'); mostrarLoading("Sincronizando no Supabase..."); try { const { error } = await db.from('custos_sku').upsert(skusParaImportarGlobal, {onConflict:'sku'}); if(error) throw new Error(error.message); await carregarDadosIniciais(); showToast(skusParaImportarGlobal.length + " SKUs importados com sucesso!", "success"); skusParaImportarGlobal = []; } catch(e) { showToast(e.message, "error"); } finally { esconderLoading(); } }
+
