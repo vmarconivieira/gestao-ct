@@ -49,7 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const formEdicaoVenda = document.getElementById('formEditarVenda');
     if(formEdicaoVenda) { formEdicaoVenda.addEventListener('submit', async function(e) { e.preventDefault(); mostrarLoading("Salvando..."); const id = document.getElementById('edit_id').value; const status = document.getElementById('edit_status').value; const sobra = Number(document.getElementById('edit_repasse').value) || 0; const imposto = Number(document.getElementById('edit_imposto').value) || 0; const custo = Number(document.getElementById('edit_custo').value) || 0; const valorVenda = Number(document.getElementById('edit_venda_bruta').value) || 0; const lucro = sobra - imposto - custo; const porcentagem = valorVenda > 0 ? (lucro / valorVenda) : 0; try { const { error } = await db.from('vendas').update({ status, sobra, imposto, custo, lucro, porcentagem }).eq('id', id); if (error) throw error; fecharModalEditarVenda(); await buscarVendasServidor(); showToast("Venda atualizada com sucesso!", "success"); } catch(err) { showToast("Erro ao editar: " + err.message, "error"); } finally { esconderLoading(); } }); }
     
-    // LISTENER DO MENU SLASH (KANBAN)
     const kDesc = document.getElementById('kanban_descricao');
     if(kDesc) {
         kDesc.addEventListener('keyup', (e) => {
@@ -103,10 +102,10 @@ function calcularEditMargem() { const repasse = Number(document.getElementById('
 function acionarBuscaDinamica() { clearTimeout(debounceBuscaTimer); debounceBuscaTimer = setTimeout(() => { buscarVendasServidor(); }, 600); }
 
 async function buscarVendasServidor() { const fA = document.getElementById('filtroAno'); const fM = document.getElementById('filtroMes'); const fB = document.getElementById('buscaVendas'); const ano = fA ? fA.value : new Date().getFullYear().toString(); const mes = fM ? fM.value : ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][new Date().getMonth()]; const busca = fB ? fB.value.trim() : ""; mostrarLoading("Buscando dados..."); try { let q = db.from('vendas').select('*').order('created_at', { ascending: false }); if (busca !== "") { q = q.or(`n_venda.ilike.*${busca}*,sku.ilike.*${busca}*,descricao.ilike.*${busca}*,status.ilike.*${busca}*`); } else { if (ano !== "TODOS") q = q.eq('ano', ano); if (mes !== "TODOS") q = q.ilike('mes', mes); } const { data, error } = await q; if (error) throw error; vendasGlobais = (data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes).toUpperCase(), qtd: v.quantidade, descricao: v.descricao, sku: v.sku, nVenda: v.n_venda, urlPlataforma: v.url_ml, plataforma: v.plataforma, valorVenda: Number(v.valor_venda), sobra: Number(v.sobra), imposto: Number(v.imposto), custo: Number(v.custo), lucro: Number(v.lucro), porcentagem: Number(v.porcentagem)*100, status: v.status })); aplicarFiltrosLocais(); } catch (e) { showToast("Erro ao buscar vendas: " + (e.message || e), "error"); } finally { esconderLoading(); } }
+
 // ==========================================
 // KANBAN LOGIC & EDITOR
 // ==========================================
-
 function abrirModalKanban() { 
     document.getElementById('kanban_id').value = ''; 
     document.getElementById('formKanban').reset();
@@ -189,24 +188,16 @@ async function handleKanbanUpload(e) {
     }
 }
 
-async function buscarKanban() {
-    try {
-        const { data, error } = await db.from('kanban').select('*').order('created_at', { ascending: false });
-        if (!error && data) {
-            tarefasKanban = data;
-            renderKanban();
-        }
-    } catch (e) {
-        console.log("Kanban não iniciado ou tabela ausente.");
-    }
-}
-
 function parseMarkdown(text) {
     if (!text) return '';
     let html = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="w-full rounded-xl mt-3 mb-3 shadow-md border border-gray-200 dark:border-gray-700 object-cover">');
     html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">$1</a>');
-    html = html.replace(/(?<!src=")(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all">$1</a>');
+    
+    html = html.replace(/(href="|src=")?(https?:\/\/[^\s"<>]+)/g, function(match, prefix, url) {
+        if (prefix) return match; 
+        return '<a href="' + url + '" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all">' + url + '</a>';
+    });
     
     let lines = html.split('\n'), inTable = false, outHtml = '';
     for(let line of lines) {
@@ -224,287 +215,6 @@ function parseMarkdown(text) {
     return outHtml;
 }
 
-function renderKanban() {
-    const colunas = { 'A Fazer': [], 'Em Andamento': [], 'Concluído': [] };
-    tarefasKanban.forEach(t => { if(colunas[t.status]) colunas[t.status].push(t); });
-    
-    Object.keys(colunas).forEach(status => {
-        const divCol = document.getElementById(`coluna-${status.replace(/\s+/g, '-')}`);
-        const qtdCol = document.getElementById(`qtd-${status.toLowerCase().replace(/\s+/g, '-')}`);
-        if(!divCol) return;
-        divCol.innerHTML = '';
-        if(qtdCol) qtdCol.innerText = colunas[status].length;
-        
-        colunas[status].forEach(t => {
-            let corPrioridade = "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300";
-            let dot = "bg-blue-500";
-            if (t.prioridade === 'Alta') { corPrioridade = "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"; dot = "bg-red-500"; }
-            if (t.prioridade === 'Média') { corPrioridade = "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300"; dot = "bg-yellow-500"; }
-            
-            const dataStr = new Date(t.created_at).toLocaleDateString('pt-BR');
-            const descHtml = parseMarkdown(t.descricao || '');
-
-            divCol.innerHTML += `
-                <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 cursor-move hover:shadow-md transition-all group" draggable="true" ondragstart="iniciarDrag(event, '${t.id}')">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 ${corPrioridade}"><span class="w-1.5 h-1.5 rounded-full ${dot}"></span> ${t.prioridade}</span>
-                        <div class="flex gap-2">
-                            <button onclick="editarTarefaKanban('${t.id}')" class="text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">✏️</button>
-                            <button onclick="deletarTarefaKanban('${t.id}')" class="text-gray-400 hover:text-red-500 admin-only opacity-0 group-hover:opacity-100 transition-opacity">🗑️</button>
-                        </div>
-                    </div>
-                    <h4 class="font-bold text-gray-800 dark:text-white text-sm mb-1">${t.titulo}</h4>
-                    <div class="text-xs text-gray-500 dark:text-gray-400 mb-3 whitespace-pre-wrap">${descHtml}</div>
-                    <div class="text-[9px] text-gray-400 font-bold text-right border-t border-gray-100 dark:border-gray-700 pt-2 mt-2">${dataStr}</div>
-                </div>
-            `;
-        });
-    });
-    aplicarPermissoes(); 
-}
-
-function iniciarDrag(e, id) { e.dataTransfer.setData('text/plain', id); }
-function permitirDrop(e) { e.preventDefault(); }
-async function soltarCartao(e, novoStatus) {
-    e.preventDefault();
-    const id = e.dataTransfer.getData('text/plain');
-    const index = tarefasKanban.findIndex(t => t.id === id);
-    if (index > -1 && tarefasKanban[index].status !== novoStatus) {
-        tarefasKanban[index].status = novoStatus;
-        renderKanban(); 
-        await db.from('kanban').update({ status: novoStatus }).eq('id', id);
-    }
-}
-
-async function deletarTarefaKanban(id) {
-    if(localStorage.getItem('app_auth_nivel') !== 'ADMIN') return;
-    if(!confirm("Excluir tarefa?")) return;
-    try {
-        await db.from('kanban').delete().eq('id', id);
-        await buscarKanban();
-        showToast("Tarefa removida", "success");
-    } catch(e) {}
-}
-
-async function carregarDadosIniciais() { mostrarLoading("Sincronizando DB..."); try { const [sR, uR] = await Promise.all([ db.from('custos_sku').select('*'), db.from('usuarios').select('*') ]); if (sR.data) { catalogoSkusGlobais = sR.data.map(s => ({ SKU: s.sku, PRODUTO: s.produto, CUSTO_ANTERIOR: s.custo_anterior, CUSTO_ATUAL: s.custo_atual, CUSTO_MEDIO: s.custo_medio, FORNECEDOR: s.fornecedor, DATA_ATUALIZACAO: s.data_atualizacao, STATUS: s.status })); parseSkusDictionary(); renderPaginaSkus(1); } if (uR.data) { usuariosGlobais = uR.data.map(u => ({ usuario: u.usuario, nome: u.nome, nivel: u.nivel, originalIndex: u.id })); renderTabelaUsuarios(); } await buscarVendasServidor(); await buscarKanban(); const ind = document.getElementById('statusConexao'), txt = document.getElementById('textoConexao'); if(ind) ind.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText = `Online`; } catch (e) { showToast("Falha na sincronização: " + (e.message || e), "error"); } finally { esconderLoading(); } }
-
-function aplicarFiltrosLocais() { const fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas'); const o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : ""; vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b) || String(v.status).toLowerCase().includes(b)); if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro); atualizarCardsPainel(vendasFiltradasGlobal); atualizarGrafico(vendasFiltradasGlobal); carregarFiltroAnalise(); paginaAtualVendas=1; renderPaginaVendas(1); }
-function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
-
-function renderPaginaVendas(p) { const tp=Math.ceil(vendasFiltradasGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualVendas=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaVendas'); if(tb) tb.innerHTML=''; const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA); if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="13" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; } i.forEach(v => { let isAuto = v.nVenda.includes('MANUAL-') || v.nVenda.includes('AUTO-') || v.nVenda.includes('SYS-'); let display_nv = isAuto ? 'Lançamento' : (v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda); const l = v.urlPlataforma ? `<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${display_nv} ↗</a>` : display_nv; const sLow = String(v.status).toLowerCase(); let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'); let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold"); const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 text-xs text-gray-500">${String(v.mes).substring(0,3)}/${v.ano}</td><td class="p-4 font-mono text-[10px] font-bold text-gray-400">${v.sku || '-'}</td><td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-[10px] font-bold ${corStatus}">${v.status}</span></td><td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td><td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td><td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td><td class="p-4 text-right text-orange-500 font-semibold">${formatMoney(v.imposto)}</td><td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td><td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td><td class="p-4 text-right ${corMargem}">${(v.porcentagem || 0).toFixed(2)}%</td><td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="abrirModalEditarVenda('${v.originalIndex}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; if(tb) tb.appendChild(tr); }); const lblP = document.getElementById('lblPaginaVendas'); if(lblP) lblP.innerText=paginaAtualVendas; const lblT = document.getElementById('lblTotalPaginasVendas'); if(lblT) lblT.innerText=tp; const btnP = document.getElementById('btnPrevVendas'); if(btnP) btnP.disabled=paginaAtualVendas===1; const btnN = document.getElementById('btnNextVendas'); if(btnN) btnN.disabled=paginaAtualVendas===tp; }
-
-function switchTab(id) { ['dashboard', 'novo', 'calculadora', 'skus', 'usuarios', 'analise', 'kanban'].forEach(t => { const el = document.getElementById('tab-'+t), bt = document.getElementById('btn-tab-'+t); if(el) el.classList.add('hidden'); if(bt) bt.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float " + (['usuarios','novo','skus','analise'].includes(t)?'admin-only':''); }); const selTab = document.getElementById('tab-'+id); if(selTab) selTab.classList.remove('hidden'); const selBtn = document.getElementById('btn-tab-'+id); if(selBtn) selBtn.className = "px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float " + (['usuarios','novo','skus','analise'].includes(id)?'admin-only':''); aplicarPermissoes(); }
-function toggleGrafico() { const gc = document.getElementById('graficoContainer'); if(gc) gc.classList.toggle('hidden'); }
-function salvarRascunhoForm() { const d = {}; document.querySelectorAll('.form-draft').forEach(el => d[el.id] = el.value); localStorage.setItem('vendaDraft', JSON.stringify(d)); }
-function carregarRascunhoForm() { const d = localStorage.getItem('vendaDraft'); if (d) try { const o = JSON.parse(d); Object.keys(o).forEach(id => { const el = document.getElementById(id); if(el) el.value = o[id]; }); calcularMargemForm(); } catch(e){} }
-function limparRascunho() { localStorage.removeItem('vendaDraft'); const vf = document.getElementById('vendaForm'); if(vf) vf.reset(); configurarDataAtual(); calcularMargemForm(); }
-function inicializarTema() { if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) toggleDarkMode(true); }
-function toggleDarkMode(f = null) { const h = document.documentElement; isDarkMode = f !== null ? f : !h.classList.contains('dark'); if (isDarkMode) { h.classList.add('dark'); localStorage.setItem('theme', 'dark'); } else { h.classList.remove('dark'); localStorage.setItem('theme', 'light'); } if(vendasGlobais.length > 0) aplicarFiltrosLocais(); }
-function configurarDataAtual() { const d = new Date(); const anoEl = document.getElementById('ano'); if(anoEl) anoEl.value = d.getFullYear(); const m = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]; const mesEl = document.getElementById('mes'); if(mesEl) mesEl.value = m[d.getMonth()]; const faEl = document.getElementById('filtroAno'); if(faEl) faEl.value = d.getFullYear(); const fmEl = document.getElementById('filtroMes'); if(fmEl) fmEl.value = m[d.getMonth()]; }
-
-function atualizarCardsPainel(d) { let f=0, l=0; d.forEach(v=>{f+=v.valorVenda;l+=v.lucro;}); const tf = document.getElementById('totalFaturamento'); if(tf) tf.innerText=formatMoney(f); const tl = document.getElementById('totalLucro'); if(tl) tl.innerText=formatMoney(l); const mm = document.getElementById('mediaMargem'); if(mm) mm.innerText=`${f>0?((l/f)*100).toFixed(2):0}%`; }
-function atualizarGrafico(d) { const a={}; d.forEach(v=>{const l=`${v.mes.substring(0,3)} ${v.ano}`; if(!a[l])a[l]={f:0,l:0}; a[l].f+=v.valorVenda; a[l].l+=v.lucro;}); const l=Object.keys(a); const cg = document.getElementById('faturamentoChart'); if(!cg) return; const c=cg.getContext('2d'); if(graficoInstance) graficoInstance.destroy(); graficoInstance = new Chart(c, {type:'bar', data:{labels:l, datasets:[{label:'Faturamento Bruto', data:l.map(x=>a[x].f), backgroundColor:'#3b82f6', borderRadius: 4},{label:'Lucro Líquido', data:l.map(x=>a[x].l), backgroundColor:'#10b981', borderRadius: 4}]}, options:{responsive:true, maintainAspectRatio:false, plugins: { legend: { position: 'top' } } }}); }
-function parseSkusDictionary() { catalogoSkus = {}; catalogoSkusGlobais.forEach(s => { let c = String(s.SKU||"").trim().toUpperCase(); if(c && String(s.STATUS||"").trim().toUpperCase() !== "INATIVO") catalogoSkus[c] = { produto: String(s.PRODUTO).trim(), custo_atual: Number(s.CUSTO_ATUAL) }; }); }
-
-function carregarFiltroAnalise() { const s = document.getElementById('selectAnaliseSku'); if(!s) return; s.innerHTML = '<option value="">-- Produto/SKU --</option>'; const m = new Map(); catalogoSkusGlobais.forEach(x => { let k = String(x.SKU||"").trim().toUpperCase() || String(x.PRODUTO||"").trim(); if(k && !m.has(k)) m.set(k, {sku: x.SKU, nome: x.PRODUTO}); }); vendasGlobais.forEach(v => { let k = String(v.sku||"").trim().toUpperCase() || String(v.descricao||"").trim(); if(k && !m.has(k)) m.set(k, {sku: v.sku, nome: v.descricao}); }); Array.from(m.keys()).sort().forEach(k => { const d = m.get(k), o = document.createElement('option'); o.value = k; o.innerText = d.sku ? `${d.sku} - ${d.nome}` : d.nome; s.appendChild(o); }); }
-function renderizarAbaInteligencia() { const sA = document.getElementById('selectAnaliseSku'); const k = sA ? sA.value : ''; const v = document.getElementById('containerAnaliseVazia'), d = document.getElementById('containerAnaliseDados'); if(!k) { if(v) v.classList.remove('hidden'); if(d) d.classList.add('hidden'); return; } if(v) v.classList.add('hidden'); if(d) d.classList.remove('hidden'); const vs = vendasGlobais.filter(x => (String(x.sku||"").trim().toUpperCase() || String(x.descricao||"").trim()).toUpperCase() === k.toUpperCase()).sort((a,b) => new Date(a.ano, a.mes) - new Date(b.ano, b.mes)); let u=0, r=0, l=0; const hP=[], hC=[], hM=[], lx=[]; vs.forEach(x => { if(x.valorVenda<=0) return; const q=x.qtd>0?x.qtd:1; u+=q; r+=x.valorVenda; l+=x.lucro; lx.push(`${x.mes.substring(0,3)}/${x.ano}`); hP.push(x.valorVenda/q); hC.push(x.custo/q); hM.push(x.porcentagem); }); const pm = u>0?(r/u):0, mm = r>0?(l/r)*100:0; const aqt = document.getElementById('analiseQtdTotal'); if(aqt) aqt.innerText = u; const apm = document.getElementById('analisePrecoMedio'); if(apm) apm.innerText = `R$ ${pm.toFixed(2)}`; const amm = document.getElementById('analiseMargemMedia'); if(amm) { amm.innerText = `${mm.toFixed(2)}%`; amm.className = mm < 10 ? "text-2xl font-extrabold text-red-600 dark:text-red-400" : (mm <= 20 ? "text-2xl font-extrabold text-yellow-500 dark:text-yellow-400" : "text-2xl font-extrabold text-emerald-600 dark:text-emerald-400"); } const cEl = document.getElementById('chartAnaliseSku'); if(cEl) { if(chartAnalise) chartAnalise.destroy(); chartAnalise = new Chart(cEl.getContext('2d'), { type:'line', data:{labels:lx, datasets:[{label:'Preço', data:hP, borderColor:'#3b82f6'}, {label:'Custo', data:hC, borderColor:'#ef4444'}, {label:'Margem', data:hM, borderColor:'#10b981', yAxisID:'y1'}]}, options:{responsive:true, maintainAspectRatio:false, scales:{y:{position:'left'}, y1:{position:'right'}}} }); } }
-
-function gerarCanvasAreaTopo() { return new Promise((res, rej) => { switchTab('dashboard'); window.scrollTo(0,0); const s = document.getElementById('secaoHistorico'); const w = s ? s.style.display !== 'none' : false; if(s) s.style.display = 'none'; const a = document.getElementById('areaExport'); if(!a) return rej("Area not found"); const oW = a.style.width, oP = a.style.padding, oB = a.style.backgroundColor, cW = a.offsetWidth || window.innerWidth; a.style.width = cW+'px'; a.style.padding = '24px'; a.style.backgroundColor = isDarkMode?'#1f2937':'#f8fafc'; setTimeout(() => { html2canvas(a, {scale:2, useCORS:true, width:cW, windowWidth:cW}).then(c => { a.style.width=oW; a.style.padding=oP; a.style.backgroundColor=oB; if(s && w) s.style.display=''; res(c); }).catch(rej); }, 500); }); }
-function exportarRelatorioPNG() { mostrarLoading("Gerando imagem..."); gerarCanvasAreaTopo().then(c => { c.toBlob(async (blob) => { try { const f = new File([blob], "Relatorio_Vendas.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão C&T', text: 'Resumo Financeiro Atualizado', files: [f] }); } else { const l = document.createElement('a'); l.download = `Relatorio_Vendas.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Compartilhamento cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { esconderLoading(); showToast("Erro", "error"); }); }
-function exportarKanbanPNG() { mostrarLoading("Gerando imagem do Kanban..."); const k = document.getElementById('tab-kanban'), b = document.getElementById('kanbanButtons'); if(b) b.style.display = 'none'; const oB = k.style.backgroundColor, oP = k.style.padding; k.style.backgroundColor = isDarkMode ? '#1f2937' : '#f8fafc'; k.style.padding = '24px'; k.style.borderRadius = '24px'; setTimeout(() => { html2canvas(k, {scale:2, useCORS:true, windowWidth: k.scrollWidth}).then(c => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; c.toBlob(async (blob) => { try { const f = new File([blob], "Kanban_Operacional.png", { type: "image/png" }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ title: 'Gestão C&T', text: 'Quadro Kanban Atualizado', files: [f] }); } else { const l = document.createElement('a'); l.download = `Kanban_Operacional.png`; l.href = URL.createObjectURL(blob); l.click(); } } catch (e) { console.log("Compartilhamento cancelado."); } finally { esconderLoading(); } }, "image/png"); }).catch(e => { if(b) b.style.display = ''; k.style.backgroundColor = oB; k.style.padding = oP; k.style.borderRadius = ''; esconderLoading(); showToast("Erro ao gerar imagem", "error"); }); }, 500); }
-function exportarKanbanWhatsApp() { let txt = `📋 *Quadro Operacional - Gestão C&T*\n📅 ${new Date().toLocaleDateString('pt-BR')}\n\n`; const col = { 'A Fazer': [], 'Em Andamento': [], 'Concluído': [] }; tarefasKanban.forEach(t => { if(col[t.status]) col[t.status].push(t); }); const ic = { 'A Fazer': '🔴', 'Em Andamento': '🔵', 'Concluído': '🟢' }; Object.keys(col).forEach(s => { txt += `${ic[s]} *${s.toUpperCase()} (${col[s].length})*\n`; if(col[s].length === 0) txt += `  _Nenhuma tarefa_\n`; else col[s].forEach(t => { let p = t.prioridade === 'Alta' ? '🚨' : (t.prioridade === 'Média' ? '⚡' : '🔽'); txt += `  ▪️ ${t.titulo} [${p}]\n`; }); txt += `\n`; }); window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(txt.trim())}`, '_blank'); }
-
-function calcularMargemForm() { const q=Number(document.getElementById('quantidade')?.value)||1, v=Number(document.getElementById('valorUnitario')?.value)||0, i=Number(document.getElementById('imposto')?.value)||0, c=Number(document.getElementById('custo')?.value)||0; const t=q*v, s=t-(q*i), l=s-(q*c); const ps = document.getElementById('previewSobra'); if(ps) ps.innerText=formatMoney(s); const pl = document.getElementById('previewLucro'); if(pl) pl.innerText=formatMoney(l); const pm = document.getElementById('previewMargem'); if(pm) pm.innerText=`${t>0?((l/t)*100).toFixed(2):0}%`; }
-
-function mudarPlataformaSimulador() {
-    const plat = document.getElementById('calcPlataforma').value;
-    const lblFixo = document.getElementById('lblCalcFixo');
-    const lblComissao = document.getElementById('lblCalcComissao');
-    const boxFretePerc = document.getElementById('boxCalcFretePerc');
-    const boxAfiliado = document.getElementById('boxCalcAfiliado');
-
-    if (plat === 'ML') {
-        lblFixo.innerText = 'Frete ML (R$)';
-        lblComissao.innerText = 'Comissão ML (%)';
-        boxFretePerc.classList.add('hidden');
-        boxAfiliado.classList.add('hidden');
-    } else if (plat === 'SHOPEE') {
-        lblFixo.innerText = 'Taxa Item (R$)';
-        lblComissao.innerText = 'Comissão Shopee (%)';
-        boxFretePerc.classList.add('hidden');
-        boxAfiliado.classList.add('hidden');
-    } else if (plat === 'TIKTOK') {
-        lblFixo.innerText = 'Taxa Item (R$)';
-        lblComissao.innerText = 'Comissão TikTok (%)';
-        boxFretePerc.classList.remove('hidden');
-        boxAfiliado.classList.remove('hidden');
-    }
-    calcularSimuladores();
-}
-
-function calcularSimuladores() {
-    const plat = document.getElementById('calcPlataforma')?.value || 'ML';
-    const c = Number(document.getElementById('calcCusto')?.value) || 0;
-    const emb = Number(document.getElementById('calcEmbalagem')?.value) || 0;
-    const imp = Number(document.getElementById('calcImposto')?.value) || 0;
-    const fixo = Number(document.getElementById('calcFixo')?.value) || 0;
-    const com = Number(document.getElementById('calcComissao')?.value) || 0;
-    const fretePerc = plat === 'TIKTOK' ? (Number(document.getElementById('calcFretePerc')?.value) || 0) : 0;
-    const afil = plat === 'TIKTOK' ? (Number(document.getElementById('calcAfiliado')?.value) || 0) : 0;
-    
-    const v = Number(document.getElementById('calcVenda')?.value) || 0;
-    const m = Number(document.getElementById('calcMargemAlvo')?.value) || 0;
-
-    let lr = 0, mr = 0, ps = 0, lp = 0;
-
-    const pImp = imp / 100;
-    const pCom = com / 100;
-    const pFrete = fretePerc / 100;
-    const pAfil = afil / 100;
-    const pMargem = m / 100;
-
-    const somaPercCusto = pCom + pImp + pFrete + pAfil;
-    const somaPercTotal = somaPercCusto + pMargem;
-
-    if (v > 0) {
-        lr = v - c - emb - fixo - (v * somaPercCusto);
-        mr = (lr / v) * 100;
-    }
-
-    if (somaPercTotal < 1) {
-        ps = (c + emb + fixo) / (1 - somaPercTotal);
-        lp = ps * pMargem;
-    }
-
-    const sl1 = document.getElementById('simLucro1'); 
-    if(sl1) { sl1.innerText=formatMoney(lr); sl1.className = lr >= 0 ? "text-emerald-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; }
-    const sm1 = document.getElementById('simMargem1'); 
-    if(sm1) { sm1.innerText=`${mr.toFixed(2)}%`; sm1.className = mr >= 0 ? "text-purple-500 font-extrabold text-2xl" : "text-red-500 font-extrabold text-2xl"; }
-    
-    const sp2 = document.getElementById('simPreco2'); if(sp2) sp2.innerText=formatMoney(ps);
-    const sl2 = document.getElementById('simLucro2'); if(sl2) sl2.innerText=formatMoney(lp);
-}
-
-function limparSimulador() { ['calcVenda','calcCusto','calcEmbalagem','calcImposto','calcFixo','calcComissao','calcFretePerc','calcAfiliado','calcMargemAlvo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); calcularSimuladores(); }
-
-function iniciarImportacao(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Analisando Vendas..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; rawDataGlobal=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawDataGlobal.length===0) { esconderLoading(); return showToast("Planilha vazia","error"); } let ml=0, mp=0; for(let i=0;i<Math.min(20,rawDataGlobal.length);i++){let p=rawDataGlobal[i].filter(c=>String(c).trim()!=="").length; if(p>mp){mp=p;ml=i;}} let colSeen = {}; importHeadersGlobal = rawDataGlobal[ml].map((h, i) => { let baseName = h ? fixText(String(h)).trim() : `Vazia_${i}`; if(colSeen[baseName]) { colSeen[baseName]++; return `${baseName} ${colSeen[baseName]}`; } else { colSeen[baseName] = 1; return baseName; } }); importDataGlobal=[]; for(let i=ml+1;i<rawDataGlobal.length;i++){ let o={}, hd=false; rawDataGlobal[i].forEach((v,id)=>{ let val = (typeof v === 'string') ? fixText(v) : v; o[importHeadersGlobal[id]]=val; if(String(val).trim()!=="") hd=true; }); if(hd) importDataGlobal.push(o); } const dt=new Date(); const gA=document.getElementById('globalAno'); if(gA) gA.value=dt.getFullYear(); const gM=document.getElementById('globalMes'); if(gM) gM.value=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][dt.getMonth()]; const gp=document.getElementById('globalPlataforma'); if(gp) gp.value=importHeadersGlobal.some(h=>h.toLowerCase().includes('tarifa'))?'Mercado Livre':'Direto'; construirInterfaceMapeamento(); const mM = document.getElementById('modalMapeamento'); if(mM) mM.classList.remove('hidden'); const fid = document.getElementById('fileImportData'); if(fid) fid.value=""; esconderLoading(); } catch(err) { esconderLoading(); showToast("Erro: " + err.message, "error"); } }, (err) => { esconderLoading(); showToast("Erro leitura: " + err.message, "error"); }); }
-function fecharModalMapeamento() { const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); }
-function salvarEstadoImportacao() { atualizarMapeamentoDinamico(); } 
-
-function extrairMesAnoDaData(d) { if(!d) return null; let str = String(d).toLowerCase().replace(/\s+/g, ' ').trim(); const mapMes = {"janeiro":"JANEIRO","fevereiro":"FEVEREIRO","março":"MARÇO","abril":"ABRIL","maio":"MAIO","junho":"JUNHO","julho":"JULHO","agosto":"AGOSTO","setembro":"SETEMBRO","outubro":"OUTUBRO","novembro":"NOVEMBRO","dezembro":"DEZEMBRO", "jan":"JANEIRO", "fev":"FEVEREIRO", "mar":"MARÇO", "abr":"ABRIL", "mai":"MAIO", "jun":"JUNHO", "jul":"JULHO", "ago":"AGOSTO", "set":"SETEMBRO", "out":"OUTUBRO", "nov":"NOVEMBRO", "dez":"DEZEMBRO"}; const mArr = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]; let mlRegex = /(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i; let mlMatch = str.match(mlRegex); if(mlMatch) { return { mes: mapMes[mlMatch[1].toLowerCase()], ano: parseInt(mlMatch[2]) }; } let regBr = str.match(/(\d{2})\/(\d{2})\/(\d{2,4})/); if(regBr && regBr[1].length === 2 && regBr[2].length === 2) { let y = parseInt(regBr[3]); if (y < 100) y += 2000; let mIndex = parseInt(regBr[2]) - 1; if (mIndex >= 0 && mIndex <= 11) return { mes: mArr[mIndex], ano: y }; } let regInt = str.match(/(\d{4})-(\d{2})-(\d{2})/); if(regInt) { let mIndex = parseInt(regInt[2]) - 1; if (mIndex >= 0 && mIndex <= 11) return { mes: mArr[mIndex], ano: parseInt(regInt[1]) }; } let p = str.split(' de '); if(p.length >= 3) { let mesStr = p[1].trim(); let m = mapMes[mesStr]; let yearStr = p[2].trim().substring(0,4); if(m && !isNaN(yearStr)) return { mes: m, ano: parseInt(yearStr) }; } for (let key in mapMes) { if (str.includes(key)) { let yearMatch = str.match(/\d{4}/); if (yearMatch) return { mes: mapMes[key], ano: parseInt(yearMatch[0]) }; } } if (!isNaN(str) && Number(str) > 20000 && Number(str) < 99999) { let date = new Date(Math.round((Number(str) - 25569) * 86400 * 1000)); return { mes: mArr[date.getUTCMonth()], ano: date.getUTCFullYear() }; } let dObj = new Date(str); if(!isNaN(dObj.getTime()) && str.length > 6) return { mes: mArr[dObj.getMonth()], ano: dObj.getFullYear() }; return null; }
-
-window.produtosFaltantesGlobal = [];
-window.atualizarCustoDinamico = function(idx, val) { let p = window.produtosFaltantesGlobal[idx]; if(p) { window.custosMapeadosLote[p] = Number(val) || 0; renderPreviewImportacao(); } };
-
-function extrairProdutosUnicos() { const md = document.getElementById('map_desc'), ms = document.getElementById('map_sku'), cd=md?md.value:'', cs=ms?ms.value:''; const ac=document.getElementById('areaCustosDinamicos'), lc=document.getElementById('listaCustosProdutos'); if(lc) lc.innerHTML=''; if(!cd) { if(ac) ac.classList.add('hidden'); return; } const map={}; importDataGlobal.forEach(r=>{const d=r[cd]?String(r[cd]).trim():""; if(d&&!map[d])map[d]=cs&&r[cs]?String(r[cs]).trim().toUpperCase():"";}); produtosUnicosGlobal=Object.keys(map); window.custosMapeadosLote={}; window.produtosFaltantesGlobal = []; let skusFaltantes = false; let htmlInputs = ""; produtosUnicosGlobal.forEach((p,i) => { let sc=0; const rsku=map[p]; if(rsku&&catalogoSkus[rsku]) sc=catalogoSkus[rsku].custo_atual; else { const f=Object.keys(catalogoSkus).find(k=>catalogoSkus[k].produto.toLowerCase()===p.toLowerCase()); if(f) sc=catalogoSkus[f].custo_atual; } window.custosMapeadosLote[p]=sc; if(sc<=0) { skusFaltantes = true; let pIdx = window.produtosFaltantesGlobal.length; window.produtosFaltantesGlobal.push(p); let safeName = p.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); htmlInputs+=`<div class="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg mb-2 shadow-sm"><span class="text-xs font-bold text-gray-700 dark:text-gray-300 w-2/3 truncate" title="${safeName}">${safeName}</span><input type="number" step="0.01" class="w-1/3 p-2 border border-gray-300 dark:border-gray-600 rounded text-xs font-bold text-red-600 dark:bg-gray-700 dark:text-red-400 outline-none focus:ring-2 focus:ring-red-500" oninput="window.atualizarCustoDinamico(${pIdx}, this.value)" placeholder="R$ Custo"></div>`; } }); if(skusFaltantes) { let toggleHtml = `<div class="mb-4 flex items-center justify-between bg-blue-50 dark:bg-blue-900/30 p-3 rounded-xl border border-blue-200 dark:border-blue-800"><span class="text-sm font-bold text-blue-800 dark:text-blue-300">💾 Salvar custos no Catálogo?</span><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="toggleSalvarSkus" class="sr-only peer" checked><div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div></label></div>`; if(ac) ac.classList.remove('hidden'); if(lc) lc.innerHTML = toggleHtml + htmlInputs; } else { if(ac) ac.classList.add('hidden'); } }
-function renderPreviewImportacao() { const tb = document.getElementById('tabelaPreviewImportacao'), container = document.getElementById('areaPreviewImportacao'); if(!tb || !container) return; tb.innerHTML = ''; const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), giEl = document.getElementById('globalImposto'), aG = gaEl ? gaEl.value : new Date().getFullYear(), mG = gmEl ? gmEl.value : '', impG = Number(giEl ? giEl.value : 0) || 0; const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cnvEl=document.getElementById('map_nven'), cqEl=document.getElementById('map_qtd'), cveEl=document.getElementById('map_venda'), ctoEl=document.getElementById('map_total'), cesEl=document.getElementById('map_estorno'), cstEl=document.getElementById('map_status'); const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cVen=cveEl?cveEl.value:'', cTot=ctoEl?ctoEl.value:''; if(!cDesc) { container.classList.add('hidden'); return; } let count = 0; for(let r of importDataGlobal) { if(!r[cDesc]) continue; let md=mG, ad=aG; if(cData&&r[cData]){ const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;} } let rp_raw = cVen ? universalNumberParse(r[cVen]) : 0; let isUnitario = cVen && String(cVen).toLowerCase().includes('unit'); let q = Number(r[cQtd]) || 1; let bruto = isUnitario ? (rp_raw * q) : rp_raw; let repasse = cTot ? universalNumberParse(r[cTot]) : 0; let es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0, sk=r[cSku]||"", ds=r[cDesc]||"N/A", st=cstEl&&cstEl.value?r[cstEl.value]||"Concluído":"Concluído"; let imp = bruto * (impG / 100); let cst = (window.custosMapeadosLote[ds] || 0) * q; let canc=(cTot&&(es<0||repasse<=0))||(!cTot&&(st.toLowerCase().includes('canc')||bruto<=0)); if(canc){ bruto = 0; imp = 0; cst = 0; repasse = 0; } let luc = repasse - imp - cst; tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"><td class="p-3 text-xs font-bold text-gray-500">${md.substring(0,3)}/${ad}</td><td class="p-3 font-mono text-[10px] font-bold text-gray-400">${sk || '-'}</td><td class="p-3 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${ds}">${ds}</td><td class="p-3 text-center font-bold text-indigo-600">${q}</td><td class="p-3 text-right text-blue-600 dark:text-blue-400 font-bold">${formatMoney(bruto)}</td><td class="p-3 text-right text-gray-600 font-semibold">${formatMoney(repasse)}</td><td class="p-3 text-right text-orange-500 font-semibold">${formatMoney(imp)}</td><td class="p-3 text-right text-red-500 font-semibold">${formatMoney(cst)}</td><td class="p-3 text-right font-extrabold ${luc >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(luc)}</td></tr>`; count++; if(count >= 3) break; } if(count > 0) container.classList.remove('hidden'); else container.classList.add('hidden'); }
-function atualizarMapeamentoDinamico() { const cdEl = document.getElementById('map_data'), gAno = document.getElementById('globalAno'), gMes = document.getElementById('globalMes'), indData = document.getElementById('indDataAutomatica'); if(cdEl && cdEl.value) { if(gAno) gAno.disabled = true; if(gMes) gMes.disabled = true; if(indData) indData.classList.remove('hidden'); } else { if(gAno) gAno.disabled = false; if(gMes) gMes.disabled = false; if(indData) indData.classList.add('hidden'); } extrairProdutosUnicos(); renderPreviewImportacao(); }
-function construirInterfaceMapeamento() { const c=document.getElementById('mapeamentoContainer'); if(!c) return; c.innerHTML=''; [{id:'map_data',l:'Data',s:['Data da venda', 'Data']}, {id:'map_sku',l:'SKU',s:['SKU']}, {id:'map_desc',l:'Descrição',s:['Título do anúncio', 'Descrição', 'Título']}, {id:'map_nven',l:'Nº Venda',s:['N.º de venda', 'Nº de venda', 'N.º']}, {id:'map_qtd',l:'Qtd',s:['Unidades', 'Unidade', 'Quantidade', 'Qtd']}, {id:'map_status',l:'Status',s:['Estado', 'Status']}, {id:'map_venda',l:'Venda (R$)',s:['Preço unitário de venda do anúncio', 'Preço unitário', 'Receita por pro', 'Venda', 'Bruto']}, {id:'map_rec_envio',l:'Envio (R$)',s:['Receita por envio (BRL)', 'Receita por envio']}, {id:'map_tarifa_venda',l:'Tarifa V. (R$)',s:['Tarifa de venda e impostos (BRL)', 'Tarifa de venda', 'Taxa']}, {id:'map_tarifa_envio',l:'Tarifa E. (R$)',s:['Tarifas de envio (BRL)', 'Tarifas de envio', 'Frete']}, {id:'map_estorno',l:'Estorno (R$)',s:['Cancelamentos e reembolsos (BRL)', 'Cancelamentos e reembolsos', 'Cancelamento', 'Estorno']}, {id:'map_total',l:'Total (R$)',s:['Total (BRL)', 'Total']}].forEach(f => { let bestMatch = ""; for(let s of f.s) { let exact = importHeadersGlobal.find(hd => hd.toLowerCase() === s.toLowerCase()); if(exact) { bestMatch = exact; break; } } if(!bestMatch) { for(let s of f.s) { let partial = importHeadersGlobal.find(hd => hd.toLowerCase().includes(s.toLowerCase())); if(partial) { bestMatch = partial; break; } } } let h=`<div class="flex flex-col bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm"><label class="text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">${f.l}</label><select id="${f.id}" onchange="atualizarMapeamentoDinamico()" class="p-2.5 outline-none text-xs border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"><option value="">-- Ignorar --</option>`; importHeadersGlobal.forEach(hd => { h+=`<option value="${hd}" ${hd === bestMatch ? 'selected' : ''}>${hd}</option>`; }); c.innerHTML+=h+'</select></div>'; }); atualizarMapeamentoDinamico(); }
-
-async function processarEnvioEmLote() { mostrarLoading("Sincronizando Lote..."); const gaEl = document.getElementById('globalAno'), gmEl = document.getElementById('globalMes'), gpEl = document.getElementById('globalPlataforma'), giEl = document.getElementById('globalImposto'); const aG=gaEl?gaEl.value:new Date().getFullYear(), mG=gmEl?gmEl.value:'', pG=gpEl?gpEl.value:'', impG=Number(giEl?giEl.value:0)||0; const cdEl=document.getElementById('map_data'), csEl=document.getElementById('map_sku'), cdeEl=document.getElementById('map_desc'), cnvEl=document.getElementById('map_nven'), cqEl=document.getElementById('map_qtd'), cstEl=document.getElementById('map_status'), cveEl=document.getElementById('map_venda'), creEl=document.getElementById('map_rec_envio'), ctvEl=document.getElementById('map_tarifa_venda'), cteEl=document.getElementById('map_tarifa_envio'), cesEl=document.getElementById('map_estorno'), ctoEl=document.getElementById('map_total'); const cData=cdEl?cdEl.value:'', cSku=csEl?csEl.value:'', cDesc=cdeEl?cdeEl.value:'', cNv=cnvEl?cnvEl.value:'', cQtd=cqEl?cqEl.value:'', cSt=cstEl?cstEl.value:'', cVen=cveEl?cveEl.value:'', cRe=creEl?creEl.value:'', cTv=ctvEl?ctvEl.value:'', cTe=cteEl?cteEl.value:'', cEs=cesEl?cesEl.value:'', cTot=ctoEl?ctoEl.value:''; let orderCounts = {}; for(let r of importDataGlobal) { if(r[cDesc]) { let nv = r[cNv] || "ID-Auto"; orderCounts[nv] = (orderCounts[nv] || 0) + 1; } } let mapVendas = {}, orderIndices = {}, qN = 0, qA = 0; let novosSkusParaSalvar = []; let skuTrackSet = new Set(); const tglSku = document.getElementById('toggleSalvarSkus'); const allowSaveSkus = tglSku ? tglSku.checked : false; let batchTime = Date.now().toString(36).toUpperCase(); for(let i = 0; i < importDataGlobal.length; i++) { let r = importDataGlobal[i]; if(!r[cDesc]) continue; let md=mG, ad=aG; if(cData && r[cData]){ const ex=extrairMesAnoDaData(r[cData]); if(ex){md=ex.mes;ad=ex.ano;} } let rp_raw = cVen ? universalNumberParse(r[cVen]) : 0; let isUnitario = cVen && String(cVen).toLowerCase().includes('unit'); let q = Number(r[cQtd]) || 1; let bruto = isUnitario ? (rp_raw * q) : rp_raw; let repasse = cTot ? universalNumberParse(r[cTot]) : 0; let es=cesEl&&cesEl.value?universalNumberParse(r[cesEl.value]):0; let sk=(cSku&&r[cSku])?String(r[cSku]).trim():"", ds=r[cDesc]?String(r[cDesc]).trim():"N/A", st=cSt&&r[cSt]?r[cSt]:"Concluído"; let original_nv = (cNv && r[cNv]) ? String(r[cNv]).trim() : `MANUAL-${Math.random().toString(36).substr(2, 6).toUpperCase()}-${Date.now().toString().slice(-4)}`; let nv_banco = original_nv; if(orderCounts[original_nv] > 1) { orderIndices[original_nv] = (orderIndices[original_nv] || 0) + 1; nv_banco = `${original_nv}-I${orderIndices[original_nv]}`; } let unit_cost = window.custosMapeadosLote[ds] || 0; let cst = unit_cost * q; let imp = bruto * (impG / 100); let canc=(cTot&&(es<0||repasse<=0))||(!cTot&&(st.toLowerCase().includes('canc')||bruto<=0)); if(canc){ bruto = 0; imp = 0; cst = 0; repasse = 0; } let luc = repasse - imp - cst; let mar = bruto > 0 ? (luc / bruto) : 0; let finalSku = (sk || ds.toUpperCase()).substring(0, 150); if (allowSaveSkus && unit_cost > 0 && !skuTrackSet.has(finalSku)) { skuTrackSet.add(finalSku); let existing = catalogoSkus[finalSku] || Object.values(catalogoSkus).find(x => x.produto.toLowerCase() === ds.toLowerCase()); if (!existing || existing.custo_atual <= 0) { novosSkusParaSalvar.push({ sku: finalSku, produto: ds, custo_atual: unit_cost, status: 'Ativo' }); } } let urlML = (pG === 'Mercado Livre' && !nv_banco.includes('MANUAL')) ? `https://www.mercadolivre.com.br/vendas/${original_nv}/detalhe` : ''; let exv = vendasGlobais.some(v => v.nVenda === nv_banco && v.plataforma === pG); let key = `${pG}_${nv_banco}`; if (!mapVendas[key]) { if(exv) qA++; else qN++; } mapVendas[key] = { ano: ad, mes: md, quantidade: q, descricao: ds, n_venda: nv_banco, plataforma: pG, url_ml: urlML, valor_venda: bruto, sobra: repasse, imposto: imp, custo: cst, lucro: luc, porcentagem: mar, sku: sk, status: st, estorno: es }; } let b = Object.values(mapVendas); if(b.length>0) { try { const {error} = await db.from('vendas').upsert(b, {onConflict:'plataforma,n_venda'}); if(error) throw error; if(novosSkusParaSalvar.length > 0) { const {error: errSku} = await db.from('custos_sku').upsert(novosSkusParaSalvar, {onConflict:'sku'}); if(errSku) console.error("Erro ao salvar novos SKUs:", errSku); } let fTotal = 0, lTotal = 0; b.forEach(x => { fTotal += x.valor_venda; lTotal += x.lucro; }); const rn=document.getElementById('resumoLoteNovos'); if(rn) rn.innerText=qN; const ra=document.getElementById('resumoLoteAtualizados'); if(ra) ra.innerText=qA; const rf=document.getElementById('resumoLoteFat'); if(rf) rf.innerText=formatMoney(fTotal); const rl=document.getElementById('resumoLoteLucro'); if(rl) rl.innerText=formatMoney(lTotal); const mm=document.getElementById('modalMapeamento'); if(mm) mm.classList.add('hidden'); await carregarDadosIniciais(); const rm=document.getElementById('modalResumoLote'); if(rm) rm.classList.remove('hidden'); } catch(e) { showToast("Erro na importação: " + (e.message || "Falha ao enviar."), "error"); } } else { showToast("Nenhuma linha válida.", "error"); } esconderLoading(); }
-
-function importarCsvSkus(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Lendo Arquivo de SKUs..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados."); const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase()); const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO")); if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido."); const mapSkus = {}; for(let i=1;i<rawData.length;i++){ const row = rawData[i]; if(row.filter(c=>String(c).trim()!=="").length === 0) continue; let prodName = iP>-1 ? fixText(String(row[iP])).trim() : ''; let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase(); if(!skuCode) continue; let valStr = iC>-1 ? row[iC] : 0; mapSkus[skuCode] = { sku: skuCode, produto: prodName || skuCode, custo_atual: universalNumberParse(valStr), status:'Ativo' }; } skusParaImportarGlobal = Object.values(mapSkus); if(skusParaImportarGlobal.length>0) { const tb = document.getElementById('tabelaPreviewSkuData'); if(tb) { tb.innerHTML = ''; let limit = Math.min(3, skusParaImportarGlobal.length); for(let i=0; i<limit; i++) { let item = skusParaImportarGlobal[i]; tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50"><td class="p-4 font-mono text-[10px] font-bold text-gray-500">${item.sku}</td><td class="p-4 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${item.produto}">${item.produto}</td><td class="p-4 text-right font-extrabold text-red-500">${formatMoney(item.custo_atual)}</td></tr>`; } } esconderLoading(); const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.remove('hidden'); } else { throw new Error("Nenhum dado válido."); } } catch(err){ esconderLoading(); showToast(err.message, "error"); } finally{ const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value=''; } }, (err) => { esconderLoading(); showToast("Erro ao ler arquivo: " + err.message, "error"); }); }
-async function confirmarImportacaoSkus() { const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.add('hidden'); mostrarLoading("Sincronizando no Supabase..."); try { const { error } = await db.from('custos_sku').upsert(skusParaImportarGlobal, {onConflict:'sku'}); if(error) throw new Error(error.message); await carregarDadosIniciais(); showToast(skusParaImportarGlobal.length + " SKUs importados com sucesso!", "success"); skusParaImportarGlobal = []; } catch(e) { showToast(e.message, "error"); } finally { esconderLoading(); } }
-
-function renderPaginaSkus(p) { const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b)); const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML=''; skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => { let isActive = String(s.STATUS).trim().toUpperCase() !== "INATIVO"; let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"; const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${s.SKU.replace(/'/g,"\\'")}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; if(tb) tb.appendChild(tr); }); const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp; const btnP = document.getElementById('btnPrevSkus'); if(btnP) btnP.disabled=paginaAtualSkus===1; const btnN = document.getElementById('btnNextSkus'); if(btnN) btnN.disabled=paginaAtualSkus===tp; }
-function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
-function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
-async function deletarSku(skuCode) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; if(!confirm(`Tem certeza que deseja apagar o produto SKU: ${skuCode}?`)) return; mostrarLoading("Apagando SKU..."); try { await db.from('custos_sku').delete().eq('sku', skuCode); await carregarDadosIniciais(); showToast("SKU Excluído!","success"); } catch(e) { showToast("Erro ao excluir", "error"); } finally { esconderLoading(); } }
-
-const formSku = document.getElementById('formCadastroSku');
-if(formSku) { formSku.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { await db.from('custos_sku').upsert({sku:document.getElementById('skuForm_sku').value, produto:document.getElementById('skuForm_produto').value, custo_atual:document.getElementById('skuForm_custoAtual').value, custo_medio:document.getElementById('skuForm_custoMedio').value, fornecedor:document.getElementById('skuForm_fornecedor').value, status:document.getElementById('skuForm_status').value}, {onConflict:'sku'}); document.getElementById('formCadastroSku').reset(); await carregarDadosIniciais(); showToast("SKU Salvo!","success"); } catch(er){} finally{esconderLoading();} }); }
-
-function renderTabelaUsuarios() { const tb=document.getElementById('tabelaUsuarios'); if(!tb) return; tb.innerHTML=''; usuariosGlobais.forEach(u => { const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; tr.innerHTML=`<td class="p-4 font-bold text-gray-800 dark:text-gray-200 font-mono">${u.usuario}</td><td class="p-4 text-gray-700 dark:text-gray-300">${u.nome}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${u.nivel==='ADMIN'?'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300':'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'}">${u.nivel}</span></td><td class="p-4 text-center"><button onclick="editarUsuario('${u.usuario}','${u.nome}','${u.nivel}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarUsuario('${u.originalIndex}','${u.usuario}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; tb.appendChild(tr); }); }
-function editarUsuario(u,n,l) { document.getElementById('userForm_user').value=u; document.getElementById('userForm_nome').value=n; document.getElementById('userForm_nivel').value=l; document.getElementById('userForm_senha').value=''; window.scrollTo(0,0); }
-
-const formUser = document.getElementById('formCadastroUser');
-if(formUser) { formUser.addEventListener('submit', async function(e){ e.preventDefault(); mostrarLoading(); try { const u=document.getElementById('userForm_user').value.toLowerCase(), s=document.getElementById('userForm_senha').value; const p={usuario:u, nome:document.getElementById('userForm_nome').value, nivel:document.getElementById('userForm_nivel').value}; const {data}=await db.from('usuarios').select('id,senha').eq('usuario',u); if(s) p.senha=await hashSHA256(s); else if(data&&data.length>0) p.senha=data[0].senha; else p.senha=await hashSHA256(u); if(data&&data.length>0) await db.from('usuarios').update(p).eq('id',data[0].id); else await db.from('usuarios').insert([p]); document.getElementById('formCadastroUser').reset(); await carregarDadosIniciais(); showToast("Salvo!","success"); } catch(er){} finally{esconderLoading();} }); }
-async function deletarUsuario(id,u) { if(u===localStorage.getItem('app_auth_login'))return showToast("Você não pode se excluir.","error"); if(!confirm("Apagar?"))return; mostrarLoading(); try { await db.from('usuarios').delete().eq('id',id); await carregarDadosIniciais(); } catch(e){} finally{esconderLoading();} }// ==========================================
-// KANBAN LOGIC & EDITOR
-// ==========================================
-
-function abrirModalKanban() { 
-    document.getElementById('kanban_id').value = ''; 
-    document.getElementById('formKanban').reset();
-    document.getElementById('kanbanModalTitle').innerHTML = '<span class="mr-2">📋</span> Nova Tarefa';
-    document.getElementById('modalKanban').classList.remove('hidden'); 
-    document.getElementById('slashMenu').classList.add('hidden');
-}
-
-function fecharModalKanban() { document.getElementById('modalKanban').classList.add('hidden'); }
-
-function editarTarefaKanban(id) {
-    const t = tarefasKanban.find(x => x.id === id);
-    if(!t) return;
-    document.getElementById('kanban_id').value = t.id;
-    document.getElementById('kanban_titulo').value = t.titulo;
-    document.getElementById('kanban_descricao').value = t.descricao || '';
-    document.getElementById('kanban_prioridade').value = t.prioridade;
-    document.getElementById('kanbanModalTitle').innerHTML = '<span class="mr-2">✏️</span> Editar Tarefa';
-    document.getElementById('slashMenu').classList.add('hidden');
-    document.getElementById('modalKanban').classList.remove('hidden');
-}
-
-function fecharSlashMenu() { document.getElementById('slashMenu').classList.add('hidden'); }
-
-function insertTabela() {
-    const d = document.getElementById('kanban_descricao');
-    d.value = d.value.replace(/\/$/, '') + '\n| Produto | Status | Obs |\n| --- | --- | --- |\n| Item 1 | Pendente | - |\n';
-    fecharSlashMenu(); d.focus();
-}
-
-function triggerKanbanUpload(type) {
-    const fi = document.getElementById('fileUploadKanban');
-    fi.accept = type === 'image' ? 'image/*' : '*/*';
-    fi.click();
-    fecharSlashMenu();
-}
-
-function compressImage(file) {
-    return new Promise((resolve) => {
-        if (!file.type.startsWith('image/')) return resolve(file);
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = event => {
-            const img = new Image();
-            img.src = event.target.result;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX = 1000;
-                let w = img.width, h = img.height;
-                if (w > MAX) { h *= MAX / w; w = MAX; }
-                canvas.width = w; canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                canvas.toBlob(blob => resolve(new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".webp", { type: 'image/webp' })), 'image/webp', 0.8);
-            };
-        };
-    });
-}
-
-async function handleKanbanUpload(e) {
-    const file = e.target.files[0];
-    if(!file) return;
-    mostrarLoading("Anexando Arquivo...");
-    try {
-        let finalFile = file;
-        if(file.type.startsWith('image/')) finalFile = await compressImage(file);
-        const fName = `kanban-${Date.now()}-${Math.random().toString(36).substring(2)}.${finalFile.name.split('.').pop()}`;
-        const { error } = await db.storage.from('kanban-anexos').upload(fName, finalFile);
-        if (error) throw error;
-        const { data } = db.storage.from('kanban-anexos').getPublicUrl(fName);
-        
-        const d = document.getElementById('kanban_descricao');
-        let md = file.type.startsWith('image/') ? `\n![Anexo](${data.publicUrl})\n` : `\n[📄 Abrir ${file.name}](${data.publicUrl})\n`;
-        d.value = d.value.replace(/\/$/, '') + md;
-        showToast("Arquivo Anexado!", "success");
-    } catch(err) {
-        showToast("Erro no anexo: " + err.message, "error");
-    } finally {
-        esconderLoading(); e.target.value = ''; document.getElementById('kanban_descricao').focus();
-    }
-}
-
 async function buscarKanban() {
     try {
         const { data, error } = await db.from('kanban').select('*').order('created_at', { ascending: false });
@@ -515,29 +225,6 @@ async function buscarKanban() {
     } catch (e) {
         console.log("Kanban não iniciado ou tabela ausente.");
     }
-}
-
-function parseMarkdown(text) {
-    if (!text) return '';
-    let html = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="w-full rounded-xl mt-3 mb-3 shadow-md border border-gray-200 dark:border-gray-700 object-cover">');
-    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">$1</a>');
-    html = html.replace(/(?<!src=")(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all">$1</a>');
-    
-    let lines = html.split('\n'), inTable = false, outHtml = '';
-    for(let line of lines) {
-        if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-            if (!inTable) { outHtml += '<div class="overflow-x-auto my-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><table class="w-full text-left text-xs whitespace-nowrap bg-white dark:bg-gray-800"><tbody class="divide-y divide-gray-200 dark:divide-gray-700">'; inTable = true; }
-            if (line.replace(/[\s\|-]/g, '') === '') continue; 
-            let cells = line.split('|').filter((_, i, arr) => i > 0 && i < arr.length - 1);
-            outHtml += '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">' + cells.map(c => `<td class="p-2 border-r border-gray-200 dark:border-gray-700 last:border-0">${c.trim()}</td>`).join('') + '</tr>';
-        } else {
-            if (inTable) { outHtml += '</tbody></table></div>'; inTable = false; }
-            outHtml += line + '\n';
-        }
-    }
-    if (inTable) outHtml += '</tbody></table></div>';
-    return outHtml;
 }
 
 function renderKanban() {
