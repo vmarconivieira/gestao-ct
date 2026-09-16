@@ -12,7 +12,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css?v=1.5">
+    <link rel="stylesheet" href="style.css?v=1.6">
 </head>
 <body class="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 text-gray-800 dark:from-gray-900 dark:via-gray-800 dark:to-slate-900 dark:text-gray-100 min-h-screen p-3 sm:p-5 transition-colors duration-500">
 
@@ -126,6 +126,7 @@
             </form>
         </div>
     </div>
+
     <!-- MODAL KANBAN (NOVO / EDITAR) -->
     <div id="modalKanban" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-2xl border border-purple-100 dark:border-gray-700 animate-fade-in max-h-[95vh] overflow-y-auto custom-scrollbar">
@@ -268,16 +269,12 @@
     <!-- CONTEÚDO PRINCIPAL -->
     <div id="appContent" class="hidden max-w-7xl mx-auto space-y-6">
         <header class="glass-panel p-4 md:p-6 rounded-3xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-4 animate-fade-in">
-            <div class="text-center md:text-left flex items-center gap-3">
-                <div class="h-12 flex items-center justify-center">
-                    <img src="logo.png" alt="C&T" class="h-10 w-auto object-contain">
-                </div>
-                <div>
-                    <h1 class="text-2xl md:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">Gestão C&T</h1>
-                    <div class="flex items-center justify-center md:justify-start mt-1">
-                        <span id="statusConexao" class="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"></span>
-                        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400" id="textoConexao">Supabase DB</span>
-                        <button onclick="carregarDadosIniciais()" class="ml-2 bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 rounded-full w-6 h-6 flex items-center justify-center">🔄</button>
+            <div class="text-center md:text-left flex items-center gap-4">
+                <img src="logo.png" alt="C&T" class="h-16 sm:h-20 w-auto object-contain">
+                <div class="flex flex-col justify-center">
+                    <div class="flex items-center gap-2 mt-1">
+                        <span id="statusConexao" class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm" title="Sistema Online"></span>
+                        <button onclick="carregarDadosIniciais()" class="bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-lg p-1.5 transition-colors shadow-sm text-xs flex items-center justify-center" title="Sincronizar Dados">🔄</button>
                     </div>
                 </div>
             </div>
@@ -297,10 +294,10 @@
             <div class="glass-panel p-2 rounded-3xl inline-flex shadow-sm gap-2 flex-wrap justify-center">
                 <button onclick="switchTab('dashboard')" id="btn-tab-dashboard" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover-float">📊 Dashboard</button>
                 <button onclick="switchTab('kanban')" id="btn-tab-kanban" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📋 Kanban</button>
-                <button onclick="switchTab('analise')" id="btn-tab-analise" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📈 Inteligência</button>
-                <button onclick="switchTab('novo')" id="btn-tab-novo" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">✨ Novo Lançamento</button>
+                <button onclick="switchTab('analise')" id="btn-tab-analise" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📈 Inteligência</button>
                 <button onclick="switchTab('calculadora')" id="btn-tab-calculadora" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">🧮 Calculadora</button>
-                <button onclick="switchTab('skus')" id="btn-tab-skus" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📦 Custos</button>
+                <button onclick="switchTab('novo')" id="btn-tab-novo" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">✨ Novo Lançamento</button>
+                <button onclick="switchTab('skus')" id="btn-tab-skus" class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">📦 Custos</button>
                 <button onclick="switchTab('usuarios')" id="btn-tab-usuarios" class="admin-only px-4 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold text-sm transition-all text-gray-600 dark:text-gray-300 hover:bg-white/40 hover-float">👥 Equipe</button>
             </div>
         </div>
@@ -398,7 +395,6 @@
                 </div>
             </section>
         </div>
-
         <!-- ABA KANBAN -->
         <section id="tab-kanban" class="hidden space-y-6 animate-fade-in">
             <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -432,7 +428,7 @@
         </section>
 
         <!-- ABA INTELIGÊNCIA -->
-        <section id="tab-analise" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only">
+        <section id="tab-analise" class="hidden glass-panel p-5 md:p-8 rounded-3xl">
             <div class="flex flex-col sm:flex-row justify-between mb-6 gap-4">
                 <h2 class="text-xl font-bold dark:text-white">📈 Inteligência</h2>
                 <select id="selectAnaliseSku" onchange="renderizarAbaInteligencia()" class="w-full sm:w-1/3 p-3 rounded-2xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-semibold text-sm">
@@ -458,6 +454,81 @@
                 <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700">
                     <div class="w-full h-72 relative">
                         <canvas id="chartAnaliseSku"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ABA CALCULADORA -->
+        <section id="tab-calculadora" class="hidden glass-panel p-5 md:p-8 rounded-3xl">
+            <div class="flex flex-col sm:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-xl font-bold dark:text-white">🧮 Simulador</h2>
+                    <select id="calcPlataforma" onchange="mudarPlataformaSimulador()" class="p-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold text-sm">
+                        <option value="ML">Mercado Livre</option>
+                        <option value="SHOPEE">Shopee</option>
+                        <option value="TIKTOK">TikTok Shop</option>
+                    </select>
+                </div>
+                <button onclick="limparSimulador()" class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-2 px-6 rounded-full text-sm font-bold shadow-sm transition-colors hover:bg-gray-300 dark:hover:bg-gray-600">Limpar Todos</button>
+            </div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Base (R$)</label>
+                    <input type="number" id="calcCusto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-red-500 outline-none focus:ring-2 focus:ring-red-500 font-bold shadow-sm">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Embalagem (R$)</label>
+                    <input type="number" id="calcEmbalagem" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Imposto (%)</label>
+                    <input type="number" id="calcImposto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div>
+                    <label id="lblCalcFixo" class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Frete ML (R$)</label>
+                    <input type="number" id="calcFixo" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div>
+                    <label id="lblCalcComissao" class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Comissão ML (%)</label>
+                    <input type="number" id="calcComissao" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div id="boxCalcFretePerc" class="hidden">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Frete TikTok (%)</label>
+                    <input type="number" id="calcFretePerc" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+                <div id="boxCalcAfiliado" class="hidden">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Afiliado (%)</label>
+                    <input type="number" id="calcAfiliado" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-blue-50 dark:bg-gray-800 p-6 rounded-3xl border border-blue-100 dark:border-gray-700 shadow-sm">
+                    <h4 class="font-extrabold text-blue-800 dark:text-blue-400 mb-4 text-lg">Vender por (R$):</h4>
+                    <input type="number" id="calcVenda" step="0.01" oninput="calcularSimuladores()" class="w-full p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 font-extrabold text-xl outline-none focus:ring-2 focus:ring-blue-500 mb-6 shadow-inner">
+                    <div class="flex justify-between bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Lucro</span>
+                            <span class="text-emerald-500 font-extrabold text-2xl" id="simLucro1">R$ 0,00</span>
+                        </div>
+                        <div class="flex flex-col text-right">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Margem</span>
+                            <span class="text-purple-500 font-extrabold text-2xl" id="simMargem1">0.00%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-emerald-50 dark:bg-gray-800 p-6 rounded-3xl border border-emerald-100 dark:border-gray-700 shadow-sm">
+                    <h4 class="font-extrabold text-emerald-800 dark:text-emerald-400 mb-4 text-lg">Quero Margem (%):</h4>
+                    <input type="number" id="calcMargemAlvo" step="0.01" oninput="calcularSimuladores()" class="w-full p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-gray-900 text-emerald-600 dark:text-emerald-400 font-extrabold text-xl outline-none focus:ring-2 focus:ring-emerald-500 mb-6 shadow-inner">
+                    <div class="flex justify-between bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Lucro Proj.</span>
+                            <span class="text-emerald-500 font-extrabold text-2xl" id="simLucro2">R$ 0,00</span>
+                        </div>
+                        <div class="flex flex-col text-right">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Preço</span>
+                            <span class="font-extrabold text-2xl dark:text-white" id="simPreco2">R$ 0,00</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -564,16 +635,16 @@
         </section>
 
         <!-- ABA SKUS -->
-        <section id="tab-skus" class="hidden glass-panel p-5 md:p-8 rounded-3xl admin-only">
+        <section id="tab-skus" class="hidden glass-panel p-5 md:p-8 rounded-3xl">
             <div class="flex flex-col sm:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4">
                 <h2 class="text-xl font-bold dark:text-white">📦 Catálogo de SKUs</h2>
-                <div>
+                <div class="admin-only">
                     <input type="file" id="fileImportSkuCsv" class="hidden" accept=".csv" onchange="importarCsvSkus(event)">
                     <button onclick="document.getElementById('fileImportSkuCsv').click()" class="w-full sm:w-auto bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 py-2.5 px-6 rounded-full text-sm font-bold shadow-sm">⬆️ Importar CSV</button>
                 </div>
             </div>
             
-            <form id="formCadastroSku" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 rounded-2xl mb-8">
+            <form id="formCadastroSku" class="admin-only bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 rounded-2xl mb-8">
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div class="col-span-1 lg:col-span-1">
                         <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">SKU</label>
@@ -618,7 +689,7 @@
                             <th class="p-4">Produto</th>
                             <th class="p-4 text-right">Atual</th>
                             <th class="p-4 text-center">Status</th>
-                            <th class="p-4 text-center">Ações</th>
+                            <th class="p-4 text-center admin-only">Ações</th>
                         </tr>
                     </thead>
                     <tbody id="tabelaSkus" class="text-sm"></tbody>
@@ -631,81 +702,6 @@
                     <button onclick="mudarPaginaSkus(-1)" id="btnPrevSkus" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
                     <span class="text-sm font-extrabold py-2.5 px-5 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 rounded-xl border border-gray-300 dark:border-gray-700 shadow-inner"><span id="lblPaginaSkus">1</span> <span class="text-gray-400 mx-1">de</span> <span id="lblTotalPaginasSkus">1</span></span>
                     <button onclick="mudarPaginaSkus(1)" id="btnNextSkus" class="px-5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-extrabold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">Próximo</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- ABA CALCULADORA -->
-        <section id="tab-calculadora" class="hidden glass-panel p-5 md:p-8 rounded-3xl">
-            <div class="flex flex-col sm:flex-row justify-between mb-6 border-b border-gray-200 dark:border-gray-700 pb-4 gap-4">
-                <div class="flex items-center gap-4">
-                    <h2 class="text-xl font-bold dark:text-white">🧮 Simulador</h2>
-                    <select id="calcPlataforma" onchange="mudarPlataformaSimulador()" class="p-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold text-sm">
-                        <option value="ML">Mercado Livre</option>
-                        <option value="SHOPEE">Shopee</option>
-                        <option value="TIKTOK">TikTok Shop</option>
-                    </select>
-                </div>
-                <button onclick="limparSimulador()" class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-2 px-6 rounded-full text-sm font-bold shadow-sm transition-colors hover:bg-gray-300 dark:hover:bg-gray-600">Limpar Todos</button>
-            </div>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <div>
-                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Custo Base (R$)</label>
-                    <input type="number" id="calcCusto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-red-500 outline-none focus:ring-2 focus:ring-red-500 font-bold shadow-sm">
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Embalagem (R$)</label>
-                    <input type="number" id="calcEmbalagem" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Imposto (%)</label>
-                    <input type="number" id="calcImposto" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
-                </div>
-                <div>
-                    <label id="lblCalcFixo" class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Frete ML (R$)</label>
-                    <input type="number" id="calcFixo" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
-                </div>
-                <div>
-                    <label id="lblCalcComissao" class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Comissão ML (%)</label>
-                    <input type="number" id="calcComissao" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
-                </div>
-                <div id="boxCalcFretePerc" class="hidden">
-                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Frete TikTok (%)</label>
-                    <input type="number" id="calcFretePerc" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
-                </div>
-                <div id="boxCalcAfiliado" class="hidden">
-                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 ml-1">Afiliado (%)</label>
-                    <input type="number" id="calcAfiliado" step="0.01" oninput="calcularSimuladores()" class="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-bold">
-                </div>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-blue-50 dark:bg-gray-800 p-6 rounded-3xl border border-blue-100 dark:border-gray-700 shadow-sm">
-                    <h4 class="font-extrabold text-blue-800 dark:text-blue-400 mb-4 text-lg">Vender por (R$):</h4>
-                    <input type="number" id="calcVenda" step="0.01" oninput="calcularSimuladores()" class="w-full p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 font-extrabold text-xl outline-none focus:ring-2 focus:ring-blue-500 mb-6 shadow-inner">
-                    <div class="flex justify-between bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                        <div class="flex flex-col">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase">Lucro</span>
-                            <span class="text-emerald-500 font-extrabold text-2xl" id="simLucro1">R$ 0,00</span>
-                        </div>
-                        <div class="flex flex-col text-right">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase">Margem</span>
-                            <span class="text-purple-500 font-extrabold text-2xl" id="simMargem1">0.00%</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-emerald-50 dark:bg-gray-800 p-6 rounded-3xl border border-emerald-100 dark:border-gray-700 shadow-sm">
-                    <h4 class="font-extrabold text-emerald-800 dark:text-emerald-400 mb-4 text-lg">Quero Margem (%):</h4>
-                    <input type="number" id="calcMargemAlvo" step="0.01" oninput="calcularSimuladores()" class="w-full p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-gray-900 text-emerald-600 dark:text-emerald-400 font-extrabold text-xl outline-none focus:ring-2 focus:ring-emerald-500 mb-6 shadow-inner">
-                    <div class="flex justify-between bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                        <div class="flex flex-col">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase">Lucro Proj.</span>
-                            <span class="text-emerald-500 font-extrabold text-2xl" id="simLucro2">R$ 0,00</span>
-                        </div>
-                        <div class="flex flex-col text-right">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase">Preço</span>
-                            <span class="font-extrabold text-2xl dark:text-white" id="simPreco2">R$ 0,00</span>
-                        </div>
-                    </div>
                 </div>
             </div>
         </section>
@@ -832,7 +828,6 @@
         </div>
     </div>
     
-    <!-- SCRIPTS MANTIDOS AQUI -->
-    <script src="app.js?v=1.5" defer></script>
+    <script src="app.js?v=1.6" defer></script>
 </body>
 </html>
