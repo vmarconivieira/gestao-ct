@@ -6,13 +6,14 @@ try { db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
 catch(e) { console.error("Falha ao inicializar o Supabase:", e); }
 
 let vendasGlobais=[], vendasFiltradasGlobal=[], catalogoSkusGlobais=[], skusFiltradosGlobal=[], catalogoSkus={}; 
-let tarefasKanban=[], graficoInstance=null, chartAnalise=null, isDarkMode=false, isFetching=false;
+let usuariosGlobais=[], tarefasKanban=[], graficoInstance=null, chartAnalise=null, isDarkMode=false, isFetching=false;
 let paginaAtualVendas=1, paginaAtualSkus=1; const ITENS_POR_PAGINA=50;
 let rawDataGlobal=[], importDataGlobal=[], importHeadersGlobal=[], produtosUnicosGlobal=[], skusParaImportarGlobal=[];
 let debounceBuscaTimer=null; 
 
 function fixText(s) { if(!s || typeof s !== 'string') return s; try { return decodeURIComponent(escape(s)); } catch(e) { return s; } }
 function lerPlanilha(f, cb, errCb) { try { if (f.name.toLowerCase().endsWith('.csv') || f.name.toLowerCase().endsWith('.txt')) { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(ev.target.result,{type:'string'}));}catch(err){errCb(err);} }; r.readAsText(f, 'windows-1252'); } else { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(new Uint8Array(ev.target.result),{type:'array'}));}catch(err){errCb(err);} }; r.readAsArrayBuffer(f); } } catch(err) { errCb(err); } }
+async function hashSHA256(str) { if (window.crypto && window.crypto.subtle) { try { const buf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)); return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join(''); } catch(e) { return btoa(unescape(encodeURIComponent(str))); } } else { return btoa(unescape(encodeURIComponent(str))); } }
 
 function showToast(m, t='info') { const c = document.getElementById('toast-container'); if(!c) return; const toast = document.createElement('div'); toast.className = `toast ${t}`; toast.innerHTML = `<span>${m}</span>`; c.appendChild(toast); setTimeout(() => { toast.style.animation = 'fadeOut 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000); }
 function mostrarLoading(t="Processando...") { const ot = document.getElementById('globalOverlayText'); if(ot) ot.innerText = t; const go = document.getElementById('globalOverlay'); if(go) go.classList.remove('hidden'); }
@@ -29,7 +30,7 @@ async function testarConexaoLogin() {
     try { 
         if(!window.supabase) throw new Error("Supabase não carregado."); 
         const { error } = await db.from('perfis').select('id').limit(1); 
-        if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText="Sistema Online (Auth Pronto)"; if(btn) { btn.disabled=false; btn.classList.remove('opacity-50','cursor-not-allowed'); } 
+        if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2"; if(txt) txt.innerText="Sistema Online"; if(btn) { btn.disabled=false; btn.classList.remove('opacity-50','cursor-not-allowed'); } 
     } catch(e) { 
         if(dot) dot.className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2"; if(txt) txt.innerText="Aguardando DB..."; setTimeout(testarConexaoLogin, 6000); 
     } 
@@ -38,23 +39,30 @@ async function testarConexaoLogin() {
 document.addEventListener('DOMContentLoaded', async () => {
     inicializarTema(); configurarDataAtual();
     
-    // Limpeza automática da aba Equipe antiga
-    const tabEq = document.getElementById('tab-usuarios');
-    const btnEq = document.getElementById('btn-tab-usuarios');
-    if(tabEq) tabEq.remove();
-    if(btnEq) btnEq.remove();
+    // Limpeza aba Equipe HTML
+    const tabEq = document.getElementById('tab-usuarios'), btnEq = document.getElementById('btn-tab-usuarios');
+    if(tabEq) tabEq.remove(); if(btnEq) btnEq.remove();
 
-    // Verificação de Sessão via Supabase Auth
+    // Verificação de Sessão Ativa
     const { data: { session } } = await db.auth.getSession();
     if (session) {
         const { data: perfis } = await db.from('perfis').select('*').eq('id', session.user.id).single();
         if(perfis) {
             localStorage.setItem('app_auth_name', perfis.nome);
             localStorage.setItem('app_auth_nivel', perfis.nivel);
-            const ls = document.getElementById('loginScreen'); if(ls) ls.classList.add('hidden'); 
-            const ac = document.getElementById('appContent'); if(ac) ac.classList.remove('hidden'); 
-            const bv = document.getElementById('bemVindoText'); if(bv) bv.innerText = `Olá, ${perfis.nome}`; 
-            aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
+            document.getElementById('loginScreen').classList.add('hidden');
+            
+            // VERIFICA SE É O PRIMEIRO ACESSO
+            if(perfis.primeiro_acesso) {
+                abrirModalSenha();
+                const btnClose = document.querySelector('#modalSenha button');
+                if(btnClose) btnClose.classList.add('hidden'); // Esconde o botão de fechar
+                showToast("Bem-vindo! Por segurança, crie sua nova senha.", "info");
+            } else {
+                document.getElementById('appContent').classList.remove('hidden'); 
+                const bv = document.getElementById('bemVindoText'); if(bv) bv.innerText = `Olá, ${perfis.nome}`; 
+                aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
+            }
         } else {
             document.getElementById('loginScreen').classList.remove('hidden');
         }
@@ -64,36 +72,46 @@ document.addEventListener('DOMContentLoaded', async () => {
         testarConexaoLogin();
     }
     
-    // NOVO MOTOR DE LOGIN (SUPABASE AUTH)
+    // LOGIN COM SUPABASE AUTH E REDIRECIONAMENTO DE PRIMEIRO ACESSO
     const formLogin = document.getElementById('formLogin');
     if(formLogin) { 
         formLogin.addEventListener('submit', async function(e) { 
             e.preventDefault(); 
             const btn=document.getElementById('btnLogin'), spinner=document.getElementById('loginSpinner'); 
             if(btn) btn.classList.add('hidden'); if(spinner) spinner.classList.remove('hidden'); 
+            
             const u=(document.getElementById('loginUser')?.value||'').trim().toLowerCase();
             const p=(document.getElementById('loginPass')?.value||'').trim(); 
             const email = u.includes('@') ? u : `${u}@ct.local`;
 
             try { 
-                const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email, password: p });
-                if (authErr) throw authErr;
+                const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email: email, password: p });
+                if (authErr) throw new Error("Credenciais inválidas.");
                 
                 const { data: perfis, error: pErr } = await db.from('perfis').select('*').eq('id', authData.user.id).single();
-                if (pErr) throw pErr;
+                if (pErr) throw new Error("Perfil não encontrado.");
 
                 localStorage.setItem('app_auth_name', perfis.nome);
                 localStorage.setItem('app_auth_nivel', perfis.nivel);
                 localStorage.setItem('app_auth_login', u);
                 
                 document.getElementById('loginScreen').classList.add('hidden');
-                document.getElementById('appContent').classList.remove('hidden');
-                const bv = document.getElementById('bemVindoText');
-                if(bv) bv.innerText = `Olá, ${perfis.nome}`;
-                aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
-                showToast('Login efetuado com sucesso!', 'success');
+                
+                // VERIFICA PRIMEIRO ACESSO AO LOGAR
+                if(perfis.primeiro_acesso) {
+                    abrirModalSenha();
+                    const btnClose = document.querySelector('#modalSenha button');
+                    if(btnClose) btnClose.classList.add('hidden'); // Impede que o usuário feche a tela
+                    showToast('Crie uma nova senha para acessar o painel!', 'info');
+                } else {
+                    document.getElementById('appContent').classList.remove('hidden');
+                    const bv = document.getElementById('bemVindoText');
+                    if(bv) bv.innerText = `Olá, ${perfis.nome}`;
+                    aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
+                    showToast('Login efetuado com sucesso!', 'success');
+                }
             } catch (err) { 
-                showToast("Acesso negado: Credenciais inválidas.", "error"); 
+                showToast(err.message, "error"); 
                 if(btn) btn.classList.remove('hidden'); if(spinner) spinner.classList.add('hidden'); 
             } 
         }); 
@@ -102,7 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('.form-draft').forEach(el => { el.addEventListener('input', salvarRascunhoForm); el.addEventListener('change', salvarRascunhoForm); });
     const skuEl = document.getElementById('sku'); if (skuEl) { skuEl.addEventListener('blur', function() { const codigo = this.value.trim().toUpperCase(); if(codigo && catalogoSkus[codigo]) { const d = document.getElementById('descricao'); if(d) d.value = catalogoSkus[codigo].produto; const c = document.getElementById('custo'); if(c) c.value = catalogoSkus[codigo].custo_atual; calcularMargemForm(); showToast('SKU Localizado!', 'success'); } }); }
 
-    // MUDANÇA DE SENHA OFICIAL DO SUPABASE
+    // MUDANÇA DE SENHA E LIBERAÇÃO DO PAINEL
     const formAltSenha = document.getElementById('formAlterarSenha');
     if(formAltSenha) { formAltSenha.addEventListener('submit', async function(e) { 
         e.preventDefault(); 
@@ -111,16 +129,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (sn.length < 6) return showToast("A senha precisa ter no mínimo 6 caracteres.", "error"); 
         mostrarLoading("Alterando sua senha..."); 
         try { 
+            // 1. Muda a senha oficial
             const { error } = await db.auth.updateUser({ password: sn });
             if (error) throw error;
-            showToast("Senha alterada com segurança!", 'success'); 
+            
+            // 2. Tira a trava de "primeiro_acesso" da tabela perfis
+            const { data: { session } } = await db.auth.getSession();
+            if(session) await db.from('perfis').update({ primeiro_acesso: false }).eq('id', session.user.id);
+            
+            // 3. Libera o Painel
             fecharModalSenha(); 
+            const btnClose = document.querySelector('#modalSenha button');
+            if(btnClose) btnClose.classList.remove('hidden'); // Restaura o botão fechar para o futuro
+            
+            document.getElementById('appContent').classList.remove('hidden');
+            const n = localStorage.getItem('app_auth_name');
+            const bv = document.getElementById('bemVindoText');
+            if(bv && n) bv.innerText = `Olá, ${n}`;
+            aplicarPermissoes(); carregarRascunhoForm(); carregarDadosIniciais();
+
+            showToast("Senha salva! Bem-vindo ao painel.", 'success'); 
         } catch (err) { 
             showToast("Erro: " + err.message, "error"); 
         } finally { esconderLoading(); } 
     }); }
 
-    // EXCLUSÃO DE MÊS COM RE-AUTENTICAÇÃO
+    // EXCLUSÃO DE MÊS
     const formExcMes = document.getElementById('formExcluirMes');
     if(formExcMes) { formExcMes.addEventListener('submit', async function(e) { 
         e.preventDefault(); 
@@ -130,7 +164,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try { 
             const u = localStorage.getItem('app_auth_login') || '';
             const email = u.includes('@') ? u : `${u}@ct.local`;
-            const { error: authErr } = await db.auth.signInWithPassword({ email, password: s });
+            const { error: authErr } = await db.auth.signInWithPassword({ email: email, password: s });
             if (authErr) throw new Error("Senha ADMIN incorreta.");
 
             if (localStorage.getItem('app_auth_nivel') === 'ADMIN') { 
