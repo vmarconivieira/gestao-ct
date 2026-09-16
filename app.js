@@ -13,7 +13,6 @@ let debounceBuscaTimer=null;
 
 function fixText(s) { if(!s || typeof s !== 'string') return s; try { return decodeURIComponent(escape(s)); } catch(e) { return s; } }
 function lerPlanilha(f, cb, errCb) { try { if (f.name.toLowerCase().endsWith('.csv') || f.name.toLowerCase().endsWith('.txt')) { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(ev.target.result,{type:'string'}));}catch(err){errCb(err);} }; r.readAsText(f, 'windows-1252'); } else { const r=new FileReader(); r.onload=(ev)=>{ try{cb(XLSX.read(new Uint8Array(ev.target.result),{type:'array'}));}catch(err){errCb(err);} }; r.readAsArrayBuffer(f); } } catch(err) { errCb(err); } }
-async function hashSHA256(str) { if (window.crypto && window.crypto.subtle) { try { const buf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)); return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join(''); } catch(e) { return btoa(unescape(encodeURIComponent(str))); } } else { return btoa(unescape(encodeURIComponent(str))); } }
 
 function showToast(m, t='info') { const c = document.getElementById('toast-container'); if(!c) return; const toast = document.createElement('div'); toast.className = `toast ${t}`; toast.innerHTML = `<span>${m}</span>`; c.appendChild(toast); setTimeout(() => { toast.style.animation = 'fadeOut 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000); }
 function mostrarLoading(t="Processando...") { const ot = document.getElementById('globalOverlayText'); if(ot) ot.innerText = t; const go = document.getElementById('globalOverlay'); if(go) go.classList.remove('hidden'); }
@@ -39,11 +38,9 @@ async function testarConexaoLogin() {
 document.addEventListener('DOMContentLoaded', async () => {
     inicializarTema(); configurarDataAtual();
     
-    // Limpeza aba Equipe HTML
     const tabEq = document.getElementById('tab-usuarios'), btnEq = document.getElementById('btn-tab-usuarios');
     if(tabEq) tabEq.remove(); if(btnEq) btnEq.remove();
 
-    // Verificação de Sessão Ativa
     const { data: { session } } = await db.auth.getSession();
     if (session) {
         const { data: perfis } = await db.from('perfis').select('*').eq('id', session.user.id).single();
@@ -52,7 +49,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             localStorage.setItem('app_auth_nivel', perfis.nivel);
             document.getElementById('loginScreen').classList.add('hidden');
             
-            // VERIFICA SE É O PRIMEIRO ACESSO
             if(perfis.primeiro_acesso) {
                 abrirModalSenha();
                 const btnClose = document.querySelector('#modalSenha button');
@@ -72,7 +68,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         testarConexaoLogin();
     }
     
-    // LOGIN COM SUPABASE AUTH E REDIRECIONAMENTO DE PRIMEIRO ACESSO
     const formLogin = document.getElementById('formLogin');
     if(formLogin) { 
         formLogin.addEventListener('submit', async function(e) { 
@@ -97,7 +92,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 document.getElementById('loginScreen').classList.add('hidden');
                 
-                // VERIFICA PRIMEIRO ACESSO AO LOGAR
                 if(perfis.primeiro_acesso) {
                     abrirModalSenha();
                     const btnClose = document.querySelector('#modalSenha button');
@@ -120,7 +114,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('.form-draft').forEach(el => { el.addEventListener('input', salvarRascunhoForm); el.addEventListener('change', salvarRascunhoForm); });
     const skuEl = document.getElementById('sku'); if (skuEl) { skuEl.addEventListener('blur', function() { const codigo = this.value.trim().toUpperCase(); if(codigo && catalogoSkus[codigo]) { const d = document.getElementById('descricao'); if(d) d.value = catalogoSkus[codigo].produto; const c = document.getElementById('custo'); if(c) c.value = catalogoSkus[codigo].custo_atual; calcularMargemForm(); showToast('SKU Localizado!', 'success'); } }); }
 
-    // MUDANÇA DE SENHA E LIBERAÇÃO DO PAINEL
     const formAltSenha = document.getElementById('formAlterarSenha');
     if(formAltSenha) { formAltSenha.addEventListener('submit', async function(e) { 
         e.preventDefault(); 
@@ -129,15 +122,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (sn.length < 6) return showToast("A senha precisa ter no mínimo 6 caracteres.", "error"); 
         mostrarLoading("Alterando sua senha..."); 
         try { 
-            // 1. Muda a senha oficial
             const { error } = await db.auth.updateUser({ password: sn });
             if (error) throw error;
             
-            // 2. Tira a trava de "primeiro_acesso" da tabela perfis
             const { data: { session } } = await db.auth.getSession();
             if(session) await db.from('perfis').update({ primeiro_acesso: false }).eq('id', session.user.id);
             
-            // 3. Libera o Painel
             fecharModalSenha(); 
             const btnClose = document.querySelector('#modalSenha button');
             if(btnClose) btnClose.classList.remove('hidden'); 
@@ -154,7 +144,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         } finally { esconderLoading(); } 
     }); }
 
-    // EXCLUSÃO DE MÊS
     const formExcMes = document.getElementById('formExcluirMes');
     if(formExcMes) { formExcMes.addEventListener('submit', async function(e) { 
         e.preventDefault(); 
@@ -183,12 +172,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(formEdicaoVenda) { formEdicaoVenda.addEventListener('submit', async function(e) { e.preventDefault(); mostrarLoading("Salvando..."); const id = document.getElementById('edit_id').value; const status = document.getElementById('edit_status').value; const sobra = Number(document.getElementById('edit_repasse').value) || 0; const imposto = Number(document.getElementById('edit_imposto').value) || 0; const custo = Number(document.getElementById('edit_custo').value) || 0; const valorVenda = Number(document.getElementById('edit_venda_bruta').value) || 0; const lucro = sobra - imposto - custo; const porcentagem = valorVenda > 0 ? (lucro / valorVenda) : 0; try { const { error } = await db.from('vendas').update({ status, sobra, imposto, custo, lucro, porcentagem }).eq('id', id); if (error) throw error; fecharModalEditarVenda(); await buscarVendasServidor(); showToast("Venda atualizada com sucesso!", "success"); } catch(err) { showToast("Erro ao editar: " + err.message, "error"); } finally { esconderLoading(); } }); }
     
     const kDesc = document.getElementById('kanban_descricao');
-    if(kDesc) {
-        kDesc.addEventListener('keyup', (e) => {
-            const val = kDesc.value;
-            if(val.endsWith('/')) { document.getElementById('slashMenu').classList.remove('hidden'); } else if (!val.includes('/')) { document.getElementById('slashMenu').classList.add('hidden'); }
-        });
-    }
+    if(kDesc) { kDesc.addEventListener('keyup', (e) => { const val = kDesc.value; if(val.endsWith('/')) { document.getElementById('slashMenu').classList.remove('hidden'); } else if (!val.includes('/')) { document.getElementById('slashMenu').classList.add('hidden'); } }); }
 
     const fKanban = document.getElementById('formKanban');
     if(fKanban) {
@@ -219,6 +203,28 @@ function calcularEditMargem() { const repasse = Number(document.getElementById('
 
 function acionarBuscaDinamica() { clearTimeout(debounceBuscaTimer); debounceBuscaTimer = setTimeout(() => { buscarVendasServidor(); }, 600); }
 
+async function carregarDadosIniciais() { 
+    mostrarLoading("Sincronizando DB..."); 
+    try { 
+        const sR = await db.from('custos_sku').select('*'); 
+        if (sR.data) { 
+            // Blindagem total contra campos nulos
+            catalogoSkusGlobais = sR.data.map(s => ({ 
+                SKU: String(s.sku || ""), PRODUTO: String(s.produto || ""), 
+                CUSTO_ANTERIOR: Number(s.custo_anterior) || 0, CUSTO_ATUAL: Number(s.custo_atual) || 0, 
+                CUSTO_MEDIO: Number(s.custo_medio) || 0, FORNECEDOR: String(s.fornecedor || ""), 
+                DATA_ATUALIZACAO: s.data_atualizacao, STATUS: String(s.status || "") 
+            })); 
+            parseSkusDictionary(); renderPaginaSkus(1); 
+        } 
+        await buscarVendasServidor(); 
+        await buscarKanban(); 
+    } catch (e) { 
+        console.error(e);
+        showToast("Falha na sincronização: " + (e.message || "Erro desconhecido"), "error"); 
+    } finally { esconderLoading(); } 
+}
+
 async function buscarVendasServidor() { 
     const fA = document.getElementById('filtroAno'); const fM = document.getElementById('filtroMes'); const fB = document.getElementById('buscaVendas'); const ano = fA ? fA.value : new Date().getFullYear().toString(); const mes = fM ? fM.value : ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"][new Date().getMonth()]; const busca = fB ? fB.value.trim() : ""; 
     mostrarLoading("Buscando dados..."); 
@@ -229,213 +235,24 @@ async function buscarVendasServidor() {
         const { data, error } = await q; 
         if (error) throw error; 
         if (offlineWarning) offlineWarning.classList.add('hidden');
-        vendasGlobais = (data || []).map(v => ({ originalIndex: v.id, ano: v.ano, mes: String(v.mes).toUpperCase(), qtd: v.quantidade, descricao: v.descricao, sku: v.sku, nVenda: v.n_venda, urlPlataforma: v.url_ml, plataforma: v.plataforma, valorVenda: Number(v.valor_venda), sobra: Number(v.sobra), imposto: Number(v.imposto), custo: Number(v.custo), lucro: Number(v.lucro), porcentagem: Number(v.porcentagem)*100, status: v.status })); 
+        
+        // Blindagem total contra campos nulos
+        vendasGlobais = (data || []).map(v => ({ 
+            originalIndex: v.id, ano: v.ano, mes: String(v.mes || "").toUpperCase(), qtd: v.quantidade, 
+            descricao: String(v.descricao || ""), sku: String(v.sku || ""), nVenda: String(v.n_venda || ""), 
+            urlPlataforma: String(v.url_ml || ""), plataforma: String(v.plataforma || ""), 
+            valorVenda: Number(v.valor_venda) || 0, sobra: Number(v.sobra) || 0, imposto: Number(v.imposto) || 0, 
+            custo: Number(v.custo) || 0, lucro: Number(v.lucro) || 0, 
+            porcentagem: Number(v.porcentagem) * 100 || 0, status: String(v.status || "") 
+        })); 
         aplicarFiltrosLocais(); 
     } catch (e) { 
+        console.error(e);
         if (offlineWarning) offlineWarning.classList.remove('hidden');
     } finally { esconderLoading(); } 
 }
 
-//SEGUNDA PARTE DO CODIGO
-// ==========================================
-// KANBAN LOGIC & EDITOR
-// ==========================================
-
-function abrirModalKanban() { 
-    document.getElementById('kanban_id').value = ''; 
-    document.getElementById('formKanban').reset();
-    document.getElementById('kanbanModalTitle').innerHTML = '<span class="mr-2">📋</span> Nova Tarefa';
-    document.getElementById('modalKanban').classList.remove('hidden'); 
-    document.getElementById('slashMenu').classList.add('hidden');
-}
-
-function fecharModalKanban() { document.getElementById('modalKanban').classList.add('hidden'); }
-
-function editarTarefaKanban(id) {
-    const t = tarefasKanban.find(x => x.id === id);
-    if(!t) return;
-    document.getElementById('kanban_id').value = t.id;
-    document.getElementById('kanban_titulo').value = t.titulo;
-    document.getElementById('kanban_descricao').value = t.descricao || '';
-    document.getElementById('kanban_prioridade').value = t.prioridade;
-    document.getElementById('kanbanModalTitle').innerHTML = '<span class="mr-2">✏️</span> Editar Tarefa';
-    document.getElementById('slashMenu').classList.add('hidden');
-    document.getElementById('modalKanban').classList.remove('hidden');
-}
-
-function fecharSlashMenu() { document.getElementById('slashMenu').classList.add('hidden'); }
-
-function insertTabela() {
-    const d = document.getElementById('kanban_descricao');
-    d.value = d.value.replace(/\/$/, '') + '\n| Produto | Status | Obs |\n| --- | --- | --- |\n| Item 1 | Pendente | - |\n';
-    fecharSlashMenu(); d.focus();
-}
-
-function triggerKanbanUpload(type) {
-    const fi = document.getElementById('fileUploadKanban');
-    fi.accept = type === 'image' ? 'image/*' : '*/*';
-    fi.click();
-    fecharSlashMenu();
-}
-
-function compressImage(file) {
-    return new Promise((resolve) => {
-        if (!file.type.startsWith('image/')) return resolve(file);
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = event => {
-            const img = new Image();
-            img.src = event.target.result;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX = 1000;
-                let w = img.width, h = img.height;
-                if (w > MAX) { h *= MAX / w; w = MAX; }
-                canvas.width = w; canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                canvas.toBlob(blob => resolve(new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".webp", { type: 'image/webp' })), 'image/webp', 0.8);
-            };
-        };
-    });
-}
-
-async function handleKanbanUpload(e) {
-    const file = e.target.files[0];
-    if(!file) return;
-    mostrarLoading("Anexando Arquivo...");
-    try {
-        let finalFile = file;
-        if(file.type.startsWith('image/')) finalFile = await compressImage(file);
-        const fName = `kanban-${Date.now()}-${Math.random().toString(36).substring(2)}.${finalFile.name.split('.').pop()}`;
-        const { error } = await db.storage.from('kanban-anexos').upload(fName, finalFile);
-        if (error) throw error;
-        const { data } = db.storage.from('kanban-anexos').getPublicUrl(fName);
-        
-        const d = document.getElementById('kanban_descricao');
-        let md = file.type.startsWith('image/') ? `\n![Anexo](${data.publicUrl})\n` : `\n[📄 Abrir ${file.name}](${data.publicUrl})\n`;
-        d.value = d.value.replace(/\/$/, '') + md;
-        showToast("Arquivo Anexado!", "success");
-    } catch(err) {
-        showToast("Erro no anexo: " + err.message, "error");
-    } finally {
-        esconderLoading(); e.target.value = ''; document.getElementById('kanban_descricao').focus();
-    }
-}
-
-function parseMarkdown(text) {
-    if (!text) return '';
-    let html = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="w-full rounded-xl mt-3 mb-3 shadow-md border border-gray-200 dark:border-gray-700 object-cover">');
-    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">$1</a>');
-    
-    html = html.replace(/(href="|src=")?(https?:\/\/[^\s"<>]+)/g, function(match, prefix, url) {
-        if (prefix) return match; 
-        return '<a href="' + url + '" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold break-all">' + url + '</a>';
-    });
-    
-    let lines = html.split('\n'), inTable = false, outHtml = '';
-    for(let line of lines) {
-        if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-            if (!inTable) { outHtml += '<div class="overflow-x-auto my-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><table class="w-full text-left text-xs whitespace-nowrap bg-white dark:bg-gray-800"><tbody class="divide-y divide-gray-200 dark:divide-gray-700">'; inTable = true; }
-            if (line.replace(/[\s\|-]/g, '') === '') continue; 
-            let cells = line.split('|').filter((_, i, arr) => i > 0 && i < arr.length - 1);
-            outHtml += '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">' + cells.map(c => `<td class="p-2 border-r border-gray-200 dark:border-gray-700 last:border-0">${c.trim()}</td>`).join('') + '</tr>';
-        } else {
-            if (inTable) { outHtml += '</tbody></table></div>'; inTable = false; }
-            outHtml += line + '\n';
-        }
-    }
-    if (inTable) outHtml += '</tbody></table></div>';
-    return outHtml;
-}
-
-async function buscarKanban() {
-    try {
-        const { data, error } = await db.from('kanban').select('*').order('created_at', { ascending: false });
-        if (!error && data) {
-            tarefasKanban = data;
-            renderKanban();
-        }
-    } catch (e) {
-        console.log("Kanban não iniciado ou tabela ausente.");
-    }
-}
-
-function renderKanban() {
-    const colunas = { 'A Fazer': [], 'Em Andamento': [], 'Concluído': [] };
-    tarefasKanban.forEach(t => { if(colunas[t.status]) colunas[t.status].push(t); });
-    
-    Object.keys(colunas).forEach(status => {
-        const divCol = document.getElementById(`coluna-${status.replace(/\s+/g, '-')}`);
-        const qtdCol = document.getElementById(`qtd-${status.toLowerCase().replace(/\s+/g, '-')}`);
-        if(!divCol) return;
-        divCol.innerHTML = '';
-        if(qtdCol) qtdCol.innerText = colunas[status].length;
-        
-        colunas[status].forEach(t => {
-            let corPrioridade = "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300";
-            let dot = "bg-blue-500";
-            if (t.prioridade === 'Alta') { corPrioridade = "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"; dot = "bg-red-500"; }
-            if (t.prioridade === 'Média') { corPrioridade = "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300"; dot = "bg-yellow-500"; }
-            
-            const dataStr = new Date(t.created_at).toLocaleDateString('pt-BR');
-            const descHtml = parseMarkdown(t.descricao || '');
-
-            divCol.innerHTML += `
-                <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 cursor-move hover:shadow-md transition-all group" draggable="true" ondragstart="iniciarDrag(event, '${t.id}')">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 ${corPrioridade}"><span class="w-1.5 h-1.5 rounded-full ${dot}"></span> ${t.prioridade}</span>
-                        <div class="flex gap-2">
-                            <button onclick="editarTarefaKanban('${t.id}')" class="text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">✏️</button>
-                            <button onclick="deletarTarefaKanban('${t.id}')" class="text-gray-400 hover:text-red-500 admin-only opacity-0 group-hover:opacity-100 transition-opacity">🗑️</button>
-                        </div>
-                    </div>
-                    <h4 class="font-bold text-gray-800 dark:text-white text-sm mb-1">${t.titulo}</h4>
-                    <div class="text-xs text-gray-500 dark:text-gray-400 mb-3 whitespace-pre-wrap">${descHtml}</div>
-                    <div class="text-[9px] text-gray-400 font-bold text-right border-t border-gray-100 dark:border-gray-700 pt-2 mt-2">${dataStr}</div>
-                </div>
-            `;
-        });
-    });
-    aplicarPermissoes(); 
-}
-
-function iniciarDrag(e, id) { e.dataTransfer.setData('text/plain', id); }
-function permitirDrop(e) { e.preventDefault(); }
-async function soltarCartao(e, novoStatus) {
-    e.preventDefault();
-    const id = e.dataTransfer.getData('text/plain');
-    const index = tarefasKanban.findIndex(t => t.id === id);
-    if (index > -1 && tarefasKanban[index].status !== novoStatus) {
-        tarefasKanban[index].status = novoStatus;
-        renderKanban(); 
-        await db.from('kanban').update({ status: novoStatus }).eq('id', id);
-    }
-}
-
-async function deletarTarefaKanban(id) {
-    if(localStorage.getItem('app_auth_nivel') !== 'ADMIN') return;
-    if(!confirm("Excluir tarefa?")) return;
-    try {
-        await db.from('kanban').delete().eq('id', id);
-        await buscarKanban();
-        showToast("Tarefa removida", "success");
-    } catch(e) {}
-}
-
-async function carregarDadosIniciais() { 
-    mostrarLoading("Sincronizando DB..."); 
-    try { 
-        const sR = await db.from('custos_sku').select('*'); 
-        if (sR.data) { 
-            catalogoSkusGlobais = sR.data.map(s => ({ SKU: s.sku, PRODUTO: s.produto, CUSTO_ANTERIOR: s.custo_anterior, CUSTO_ATUAL: s.custo_atual, CUSTO_MEDIO: s.custo_medio, FORNECEDOR: s.fornecedor, DATA_ATUALIZACAO: s.data_atualizacao, STATUS: s.status })); 
-            parseSkusDictionary(); renderPaginaSkus(1); 
-        } 
-        await buscarVendasServidor(); 
-        await buscarKanban(); 
-    } catch (e) { showToast("Falha na sincronização", "error"); } finally { esconderLoading(); } 
-}
+//parte 2 do código
 
 function aplicarFiltrosLocais() { const fO = document.getElementById('ordenacao'), fB = document.getElementById('buscaVendas'); const o = fO ? fO.value : "recentes", b = fB ? fB.value.toLowerCase() : ""; vendasFiltradasGlobal = vendasGlobais.filter(v => b === "" || String(v.nVenda).toLowerCase().includes(b) || String(v.sku).toLowerCase().includes(b) || String(v.descricao).toLowerCase().includes(b) || String(v.status).toLowerCase().includes(b)); if(o==="recentes") vendasFiltradasGlobal.sort((x,y)=>x.originalIndex<y.originalIndex?-1:1); else if(o==="margem_alta") vendasFiltradasGlobal.sort((x,y)=>y.porcentagem-x.porcentagem); else vendasFiltradasGlobal.sort((x,y)=>y.lucro-x.lucro); atualizarCardsPainel(vendasFiltradasGlobal); atualizarGrafico(vendasFiltradasGlobal); carregarFiltroAnalise(); paginaAtualVendas=1; renderPaginaVendas(1); }
 function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
@@ -443,7 +260,7 @@ function mudarPaginaVendas(d) { renderPaginaVendas(paginaAtualVendas+d); }
 function renderPaginaVendas(p) { 
     const tp=Math.ceil(vendasFiltradasGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualVendas=p<1?1:p>tp?tp:p; const tb=document.getElementById('tabelaVendas'); if(tb) tb.innerHTML=''; const i=vendasFiltradasGlobal.slice((paginaAtualVendas-1)*ITENS_POR_PAGINA, paginaAtualVendas*ITENS_POR_PAGINA); 
     if(!i.length) { if(tb) tb.innerHTML=`<tr><td colspan="13" class="p-4 text-center text-gray-500">Nenhum dado</td></tr>`; return; } 
-    i.forEach(v => { let isAuto = v.nVenda.includes('MANUAL-') || v.nVenda.includes('AUTO-') || v.nVenda.includes('SYS-'); let display_nv = isAuto ? 'Lançamento' : (v.nVenda.includes('-I') ? v.nVenda.split('-I')[0] : v.nVenda); const l = v.urlPlataforma ? `<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${display_nv} ↗</a>` : display_nv; const sLow = String(v.status).toLowerCase(); let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'); let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold"); const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; 
+    i.forEach(v => { let isAuto = String(v.nVenda).includes('MANUAL-') || String(v.nVenda).includes('AUTO-') || String(v.nVenda).includes('SYS-'); let display_nv = isAuto ? 'Lançamento' : (String(v.nVenda).includes('-I') ? String(v.nVenda).split('-I')[0] : v.nVenda); const l = v.urlPlataforma ? `<a href="${v.urlPlataforma}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">${display_nv} ↗</a>` : display_nv; const sLow = String(v.status).toLowerCase(); let corStatus = sLow.includes('cancelad') || sLow.includes('devol') ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : (sLow.includes('caminho') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'); let corMargem = v.porcentagem < 10 ? "text-red-600 dark:text-red-400 font-extrabold" : (v.porcentagem <= 20 ? "text-yellow-500 dark:text-yellow-400 font-extrabold" : "text-emerald-600 dark:text-emerald-400 font-extrabold"); const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; 
     tr.innerHTML=`<td class="p-4 text-xs text-gray-500">${String(v.mes).substring(0,3)}/${v.ano}</td><td class="p-4 font-mono text-[10px] font-bold text-gray-400">${v.sku || '-'}</td><td class="p-4 truncate max-w-xs font-bold text-gray-800 dark:text-gray-200" title="${v.descricao}">${v.descricao}</td><td class="p-4 text-center"><span class="inline-block px-3 py-1 rounded-xl text-[10px] font-bold leading-tight ${corStatus} max-w-[120px] whitespace-normal">${v.status}</span></td><td class="p-4 text-center text-xs font-bold bg-gray-50 dark:bg-gray-800/50 rounded-lg">${l} <div class="text-[10px] text-gray-400 font-normal mt-1">${v.plataforma}</div></td><td class="p-4 text-center"><span class="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full text-xs font-bold">${v.qtd}</span></td><td class="p-4 text-right font-bold">${formatMoney(v.valorVenda)}</td><td class="p-4 text-right text-gray-500">${formatMoney(v.sobra)}</td><td class="p-4 text-right text-orange-500 font-semibold">${formatMoney(v.imposto)}</td><td class="p-4 text-right text-red-500 dark:text-red-400 font-semibold">${formatMoney(v.custo)}</td><td class="p-4 text-right font-extrabold ${v.lucro >= 0 ? 'text-emerald-500' : 'text-red-500'}">${formatMoney(v.lucro)}</td><td class="p-4 text-right ${corMargem}">${(v.porcentagem || 0).toFixed(2)}%</td><td class="p-4 admin-only text-center whitespace-nowrap"><button onclick="abrirModalEditarVenda('${v.originalIndex}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarLancamento('${v.originalIndex}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; 
     if(tb) tb.appendChild(tr); }); const lblP = document.getElementById('lblPaginaVendas'); if(lblP) lblP.innerText=paginaAtualVendas; const lblT = document.getElementById('lblTotalPaginasVendas'); if(lblT) lblT.innerText=tp; const btnP = document.getElementById('btnPrevVendas'); if(btnP) btnP.disabled=paginaAtualVendas===1; const btnN = document.getElementById('btnNextVendas'); if(btnN) btnN.disabled=paginaAtualVendas===tp; 
 }
@@ -602,3 +419,26 @@ async function processarEnvioEmLote() { mostrarLoading("Sincronizando Lote...");
 function importarCsvSkus(e) { const f=e.target.files[0]; if(!f) return; mostrarLoading("Lendo Arquivo de SKUs..."); lerPlanilha(f, (w) => { try { const s=w.Sheets[w.SheetNames[0]]; const rawData=XLSX.utils.sheet_to_json(s,{header:1,defval:""}); if(rawData.length < 2) throw new Error("Planilha vazia ou sem dados."); const h = rawData[0].map(x=>fixText(String(x)).trim().toUpperCase()); const iS=h.indexOf("SKU"), iP=h.indexOf("PRODUTO"), iC=h.findIndex(x=>fixText(String(x)).includes("CUSTO")); if(iS===-1 && iP===-1) throw new Error("Cabeçalho inválido."); const mapSkus = {}; for(let i=1;i<rawData.length;i++){ const row = rawData[i]; if(row.filter(c=>String(c).trim()!=="").length === 0) continue; let prodName = iP>-1 ? fixText(String(row[iP])).trim() : ''; let skuCode = iS>-1 && fixText(String(row[iS])).trim() !== "" ? fixText(String(row[iS])).trim().toUpperCase() : prodName.toUpperCase(); if(!skuCode) continue; let valStr = iC>-1 ? row[iC] : 0; mapSkus[skuCode] = { sku: skuCode, produto: prodName || skuCode, custo_atual: universalNumberParse(valStr), status:'Ativo' }; } skusParaImportarGlobal = Object.values(mapSkus); if(skusParaImportarGlobal.length>0) { const tb = document.getElementById('tabelaPreviewSkuData'); if(tb) { tb.innerHTML = ''; let limit = Math.min(3, skusParaImportarGlobal.length); for(let i=0; i<limit; i++) { let item = skusParaImportarGlobal[i]; tb.innerHTML += `<tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50"><td class="p-4 font-mono text-[10px] font-bold text-gray-500">${item.sku}</td><td class="p-4 truncate max-w-[200px] font-semibold text-gray-800 dark:text-gray-200" title="${item.produto}">${item.produto}</td><td class="p-4 text-right font-extrabold text-red-500">${formatMoney(item.custo_atual)}</td></tr>`; } } esconderLoading(); const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.remove('hidden'); } else { throw new Error("Nenhum dado válido."); } } catch(err){ esconderLoading(); showToast(err.message, "error"); } finally{ const fi = document.getElementById('fileImportSkuCsv'); if(fi) fi.value=''; } }, (err) => { esconderLoading(); showToast("Erro ao ler arquivo: " + err.message, "error"); }); }
 async function confirmarImportacaoSkus() { const modPreview = document.getElementById('modalPreviewSku'); if(modPreview) modPreview.classList.add('hidden'); mostrarLoading("Sincronizando no Supabase..."); try { const { error } = await db.from('custos_sku').upsert(skusParaImportarGlobal, {onConflict:'sku'}); if(error) throw new Error(error.message); await carregarDadosIniciais(); showToast(skusParaImportarGlobal.length + " SKUs importados com sucesso!", "success"); skusParaImportarGlobal = []; } catch(e) { showToast(e.message, "error"); } finally { esconderLoading(); } }
 
+function renderPaginaSkus(p) { 
+    const bsEl = document.getElementById('buscaSkus'); const b = bsEl ? bsEl.value.toLowerCase() : ''; 
+    skusFiltradosGlobal=catalogoSkusGlobais.filter(s=>String(s.SKU).toLowerCase().includes(b)||String(s.PRODUTO).toLowerCase().includes(b)); 
+    const tp=Math.ceil(skusFiltradosGlobal.length/ITENS_POR_PAGINA)||1; paginaAtualSkus=p<1?1:p>tp?tp:p; 
+    const tb=document.getElementById('tabelaSkus'); if(tb) tb.innerHTML=''; 
+    skusFiltradosGlobal.slice((paginaAtualSkus-1)*ITENS_POR_PAGINA, paginaAtualSkus*ITENS_POR_PAGINA).forEach(s => { 
+        let isActive = String(s.STATUS).trim().toUpperCase() !== "INATIVO"; 
+        let statusClass = isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"; 
+        let safeSku = String(s.SKU || "").replace(/'/g,"\\'");
+        const tr=document.createElement('tr'); tr.className = "border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"; 
+        tr.innerHTML=`<td class="p-4 font-mono text-sm dark:text-gray-300 font-bold">${s.SKU}</td><td class="p-4 text-gray-800 dark:text-gray-200 font-bold">${s.PRODUTO}</td><td class="p-4 text-right text-red-500 font-extrabold">${formatMoney(s.CUSTO_ATUAL)}</td><td class="p-4 text-center"><span class="px-2 py-1 rounded text-[10px] font-bold ${statusClass}">${s.STATUS || "Ativo"}</span></td><td class="p-4 text-center admin-only whitespace-nowrap"><button onclick="editarSku('${safeSku}')" class="text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg hover:text-blue-700 transition-colors mr-2">✏️</button><button onclick="deletarSku('${safeSku}')" class="text-red-500 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg hover:text-red-700 transition-colors">🗑️</button></td>`; 
+        if(tb) tb.appendChild(tr); 
+    }); 
+    const l1 = document.getElementById('lblPaginaSkus'); if(l1) l1.innerText=paginaAtualSkus; 
+    const l2 = document.getElementById('lblTotalPaginasSkus'); if(l2) l2.innerText=tp; 
+    const btnP = document.getElementById('btnPrevSkus'); if(btnP) btnP.disabled=paginaAtualSkus===1; 
+    const btnN = document.getElementById('btnNextSkus'); if(btnN) btnN.disabled=paginaAtualSkus===tp; 
+    aplicarPermissoes();
+}
+
+function mudarPaginaSkus(d) { renderPaginaSkus(paginaAtualSkus+d); }
+function editarSku(c) { const p=catalogoSkusGlobais.find(s=>s.SKU===c); if(p){ document.getElementById('skuForm_sku').value=p.SKU; document.getElementById('skuForm_produto').value=p.PRODUTO; document.getElementById('skuForm_custoAtual').value=Number(p.CUSTO_ATUAL || 0); document.getElementById('skuForm_custoMedio').value=Number(p.CUSTO_MEDIO || 0); document.getElementById('skuForm_fornecedor').value=p.FORNECEDOR; document.getElementById('skuForm_status').value=p.STATUS==='INATIVO'?'Inativo':'Ativo'; window.scrollTo(0,0); } }
+async function deletarSku(skuCode) { if(localStorage.getItem('app_auth_nivel')!=='ADMIN') return; if(!confirm(`Tem certeza que deseja apagar o produto SKU: ${skuCode}?`)) return; mostrarLoading("Apagando SKU..."); try { await db.from('custos_sku').delete().eq('sku', skuCode); await carregarDadosIniciais(); showToast("SKU Excluído!","success"); } catch(e) { showToast("Erro ao excluir", "error"); } finally { esconderLoading(); } }
